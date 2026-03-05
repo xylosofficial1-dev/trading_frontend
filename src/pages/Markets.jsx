@@ -54,6 +54,16 @@ const formatNumber = (num) => {
   return num.toFixed(2);
 };
 
+const handleResetAllRates = async () => {
+  if (!window.confirm("Reset all custom rates to 0?")) return;
+
+  await fetch(`${API}/custom-rates/reset-all`, {
+    method: "POST",
+  });
+
+  loadCustomRates(); // reload UI
+};
+
 export default function Markets() {
   const [marketCoins, setMarketCoins] = useState([]);
   const [adminCoins, setAdminCoins] = useState([]);
@@ -274,6 +284,34 @@ export default function Markets() {
                 color: COLORS.text,
               }}
             >
+              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
+  <button
+    onClick={handleResetAllRates}
+    style={{
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      background: "linear-gradient(135deg, #EF4444, #B91C1C)",
+      color: "#fff",
+      padding: "10px 18px",
+      border: "none",
+      borderRadius: "8px",
+      fontWeight: "600",
+      cursor: "pointer",
+      boxShadow: "0 4px 12px rgba(239,68,68,0.4)",
+      transition: "0.3s ease",
+    }}
+    onMouseOver={(e) =>
+      (e.currentTarget.style.transform = "scale(1.05)")
+    }
+    onMouseOut={(e) =>
+      (e.currentTarget.style.transform = "scale(1)")
+    }
+  >
+    <RefreshCw size={16} />
+    Reset All Rates
+  </button>
+</div>
               <span className="opacity-70">Last updated:</span>{" "}
               <span className="font-medium">
                 {lastUpdated.toLocaleTimeString()}
