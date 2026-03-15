@@ -33,7 +33,8 @@ export default function P2PAdmin() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
   
-  const API_BASE = "http://localhost:5000/api";
+  // const API_BASE = "http://localhost:5000/api";
+  const API_BASE = import.meta.env.VITE_API_URL + "/api";
 
   const [allData, setAllData] = useState({
     p2p_sell_listings: [],
