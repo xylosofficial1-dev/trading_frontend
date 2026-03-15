@@ -10,7 +10,8 @@ import {
   PieChart,
   Settings,
   Shield,
-  Activity
+  Activity,
+  Repeat
 } from "lucide-react";
 
 // Color constants matching your Assets component
@@ -134,7 +135,16 @@ export default function Sidebar({ open }) {
   icon={<BarChart3 size={18} />}
   label="Markets"
 />
-
+<SidebarLink
+  to="/p2p"
+  icon={<Repeat size={18} />}
+  label="P2P Trading"
+/>
+<SidebarLink
+  to="/swap-history"
+  icon={<Repeat size={18} />}
+  label="Swap History"
+/>
       </nav>
 
       {/* Logout */}

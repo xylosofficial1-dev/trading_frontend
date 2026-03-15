@@ -513,7 +513,7 @@ const confirmStatusChange = async () => {
                     <Globe size={12} style={{ color: COLORS.text, opacity: 0.6, flexShrink: 0 }} />
                     <div className="flex items-center gap-1 flex-1 min-w-0">
                       <span className="text-sm font-mono truncate" style={{ color: COLORS.text }}>
-                        {user.wallet_address.substring(0, 10)}...
+                        {user.wallet_address ? user.wallet_address.substring(0, 10) + "..." : "N/A"}
                       </span>
                       <button
                         onClick={() => copyToClipboard(user.wallet_address, `wallet-${user.id}`)}
@@ -847,7 +847,7 @@ const confirmStatusChange = async () => {
                     </div>
                     <div>
                       <label className="text-sm" style={{ color: COLORS.text, opacity: 0.7 }}>
-                        Trading Wallet
+                        Strategy Allocation Balance
                       </label>
                       <p className="text-xl font-bold mt-1" style={{ color: COLORS.purple }}>
                         ${selectedUser.trading_wallet_amount}

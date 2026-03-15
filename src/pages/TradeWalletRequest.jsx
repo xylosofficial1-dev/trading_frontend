@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Edit, Search, Check, X, Download, Eye, Filter } from "lucide-react";
+import { Edit, Search, Check, X, Download, Eye, Filter, RefreshCw } from "lucide-react";
 
 const COLORS = {
   bg: "#000000",
@@ -14,169 +14,189 @@ const COLORS = {
 };
 
 export default function TradeWalletRequest() {
-  const [deductionPercent, setDeductionPercent] = useState(10);
+  const [penaltyAmount, setPenaltyAmount] = useState(10);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
   // const API_BASE = "http://localhost:5000/api";
 
- const [requests, setRequests] = useState([]);
-const [loading, setLoading] = useState(false);
+  const [requests, setRequests] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   // Fetch deduction percentage from API
   useEffect(() => {
     fetchRequests();
-    fetchDeductionPercent();
+    fetchPenaltyAmount();
   }, []);
 
+  const fetchPenaltyAmount = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/p2p/get-penalty`);
+      const data = await res.json();
+
+      setPenaltyAmount(data.penalty_amount || 10);
+    } catch {
+      setPenaltyAmount(10);
+    }
+  };
+
   const fetchRequests = async () => {
-  try {
-    setLoading(true);
-    const res = await fetch(`${API_BASE}/wallet/admin/trade-wallet/requests`);
-    const data = await res.json();
+    try {
+      setLoading(true);
+      const res = await fetch(`${API_BASE}/wallet/admin/trade-wallet/requests`);
+      const data = await res.json();
 
-    // normalize backend keys → frontend keys
-    const formatted = data.map(r => ({
-      id: r.id,
-      userId: r.user_id,
-      name: r.name,
-      email: r.email,
-      walletAmount: Number(r.wallet_amount),
-      requestedAmount: Number(r.requested_amount),
-      sentAmount: r.sent_amount ?? "-",
-      status: r.status,
-      date: new Date(r.created_at).toLocaleDateString(),
-      rejectReason: r.reject_reason
-    }));
+      // normalize backend keys → frontend keys
+      const formatted = data.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        name: r.name,
+        email: r.email,
+        walletAmount: Number(r.wallet_amount),
+        requestedAmount: Number(r.requested_amount),
+        sentAmount: r.sent_amount ?? "-",
+        status: r.status,
+        date: new Date(r.created_at).toLocaleDateString(),
+        rejectReason: r.reject_reason,
+      }));
 
-    setRequests(formatted);
-  } catch (err) {
-    alert("Failed to load requests");
-  } finally {
-    setLoading(false);
-  }
-};
+      setRequests(formatted);
+    } catch (err) {
+      alert("Failed to load requests");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-const fetchDeductionPercent = async () => {
-  try {
-    const res = await fetch(`${API_BASE}/wallet/admin/settings`);
-    const data = await res.json();
-    setDeductionPercent(data.tw_to_mw_deduction_percent);
-  } catch {
-    setDeductionPercent(10);
-  }
-};
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([fetchRequests(), fetchPenaltyAmount()]);
+    setIsRefreshing(false);
+  };
 
-const updateDeductionPercent = async () => {
-  if (!editValue || isNaN(editValue) || editValue < 0 || editValue > 100) {
-    alert("Enter valid percentage");
-    return;
-  }
+  const fetchDeductionPercent = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/wallet/admin/settings`);
+      const data = await res.json();
+      setDeductionPercent(data.tw_to_mw_deduction_percent);
+    } catch {
+      setDeductionPercent(10);
+    }
+  };
 
-  try {
-    await fetch(`${API_BASE}/wallet/admin/settings`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        tw_to_mw_deduction_percent: Number(editValue),
-      }),
-    });
-
-    setDeductionPercent(Number(editValue));
-    setIsEditing(false);
-  } catch {
-    alert("Failed to update percentage");
-  }
-};
-
-  // const calculateSentAmount = (requestedAmount) => {
-  //   const deduction = (requestedAmount * deductionPercent) / 100;
-  //   return (requestedAmount - deduction).toFixed(2);
-  // };
-
- const handleApprove = async (id) => {
-  try {
-    const res = await fetch(
-      `${API_BASE}/wallet/admin/trade-wallet/approve`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ withdrawal_id: id }),
-      }
-    );
-
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.message || "Approval failed");
+  const updatePenaltyAmount = async () => {
+    if (!editValue || isNaN(editValue) || editValue <= 0) {
+      alert("Enter valid amount");
       return;
     }
 
-    fetchRequests();
-  } catch {
-    alert("Approval failed");
-  }
-};
+    try {
+      const res = await fetch(`${API_BASE}/p2p/set-penalty`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          penalty_amount: Number(editValue),
+        }),
+      });
 
-const handleReject = async (id) => {
-  if (!rejectReason.trim()) {
-    alert("Reason required");
-    return;
-  }
+      const data = await res.json();
 
-  try {
-    const res = await fetch(
-      `${API_BASE}/wallet/admin/trade-wallet/reject`,
-      {
+      if (!res.ok) {
+        alert(data.error || "Failed to update");
+        return;
+      }
+
+      setPenaltyAmount(Number(editValue));
+      setIsEditing(false);
+    } catch {
+      alert("Failed to update penalty");
+    }
+  };
+
+  const handleApprove = async (id) => {
+    try {
+      const res = await fetch(`${API_BASE}/wallet/admin/trade-wallet/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ withdrawal_id: id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Approval failed");
+        return;
+      }
+
+      fetchRequests();
+    } catch {
+      alert("Approval failed");
+    }
+  };
+
+  const handleReject = async (id) => {
+    if (!rejectReason.trim()) {
+      alert("Reason required");
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/wallet/admin/trade-wallet/reject`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           withdrawal_id: id,
           reason: rejectReason,
         }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.message || "Reject failed");
+        return;
       }
-    );
 
-    const data = await res.json();
-
-    if (!res.ok) {
-      alert(data.message || "Reject failed");
-      return;
+      setShowRejectModal(null);
+      setRejectReason("");
+      fetchRequests();
+    } catch {
+      alert("Reject failed");
     }
+  };
 
-    setShowRejectModal(null);
-    setRejectReason("");
-    fetchRequests();
-  } catch {
-    alert("Reject failed");
-  }
-};
+  const filteredRequests = requests.filter((request) => {
+    const q = searchQuery.toLowerCase();
 
- const filteredRequests = requests.filter(request => {
-  const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      String(request.userId).includes(q) ||
+      (request.name || "").toLowerCase().includes(q) ||
+      (request.email || "").toLowerCase().includes(q);
 
-  const matchesSearch =
-    String(request.userId).includes(q) ||
-    (request.name || "").toLowerCase().includes(q) ||
-    (request.email || "").toLowerCase().includes(q);
+    const matchesStatus =
+      statusFilter === "all" || request.status === statusFilter;
 
-  const matchesStatus =
-    statusFilter === "all" || request.status === statusFilter;
-
-  return matchesSearch && matchesStatus;
-});
+    return matchesSearch && matchesStatus;
+  });
 
   const getStatusColor = (status) => {
     switch (status) {
-      case "approved": return COLORS.green;
-      case "rejected": return COLORS.red;
-      case "pending": return COLORS.gold;
-      default: return COLORS.text;
+      case "approved":
+        return COLORS.green;
+      case "rejected":
+        return COLORS.red;
+      case "pending":
+        return COLORS.gold;
+      default:
+        return COLORS.text;
     }
   };
 
@@ -203,6 +223,26 @@ const handleReject = async (id) => {
                 Manage trade wallet withdrawal requests and deduction settings
               </p>
             </div>
+            
+            {/* Refresh Button */}
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-200 hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                backgroundColor: "rgba(255,255,255,0.05)",
+                border: `1px solid ${COLORS.border}`,
+                color: COLORS.text,
+              }}
+            >
+              <RefreshCw 
+                size={18} 
+                className={`${isRefreshing ? 'animate-spin' : ''}`} 
+              />
+              <span className="text-sm font-medium">
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </span>
+            </button>
           </div>
 
           {/* Deduction Percentage Card */}
@@ -219,129 +259,78 @@ const handleReject = async (id) => {
                   className="text-lg font-semibold mb-0"
                   style={{ color: COLORS.text }}
                 >
-                  Trade Wallet to Main Wallet Deduction
+                  Trade Wallet to Primary Credit Balance Deduction
                 </h2>
-              
-              </div>
-
-              <div className="flex items-center gap-3">
-                {isEditing ? (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="px-3 py-2 rounded-lg w-24"
-                      style={{
-                        backgroundColor: "rgba(255,255,255,0.05)",
-                        border: `1px solid ${COLORS.border}`,
-                        color: COLORS.text,
-                      }}
-                      placeholder="0-100"
-                      min="0"
-                      max="100"
-                      step="0.01"
-                    />
-                    <button
-                      onClick={updateDeductionPercent}
-                      className="px-3 py-2 rounded-lg font-medium text-sm flex items-center gap-2"
-                      style={{
-                        backgroundColor: COLORS.green,
-                        color: "#FFFFFF",
-                      }}
-                    >
-                      <Check size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setIsEditing(false);
-                        setEditValue("");
-                      }}
-                      className="px-3 py-2 rounded-lg font-medium text-sm flex items-center gap-2"
-                      style={{
-                        backgroundColor: "rgba(255,255,255,0.05)",
-                        color: COLORS.text,
-                      }}
-                    >
-                      <X size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <div
-                      className="p-2 rounded-lg text-center"
-                      style={{
-                        backgroundColor: "rgba(139, 92, 246, 0.1)",
-                        border: `1px solid ${COLORS.purple}`,
-                        color: COLORS.text,
-                        minWidth: "20px",
-                      }}
-                    >
-                      <div className="text-xl font-bold" style={{ color: COLORS.purple }}>
-                        {deductionPercent}%
-                      </div>
-                    
-                    </div>
-                    <button
-                      onClick={() => {
-                        setIsEditing(true);
-                        setEditValue(deductionPercent.toString());
-                      }}
-                      className="p-2.5 rounded-lg hover:bg-white/10 transition-colors"
-                      style={{ color: COLORS.text }}
-                    >
-                      <Edit size={20} />
-                    </button>
-                  </>
-                )}
               </div>
             </div>
 
-  {/* Stats Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-2">
-          <div
-            className="rounded-xl p-4"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="text-sm" style={{ color: COLORS.text, opacity: 0.7 }}>
-              Total Pending
+            {/* Stats Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-2">
+              <div
+                className="rounded-xl p-4"
+                style={{
+                  backgroundColor: COLORS.card,
+                  border: `1px solid ${COLORS.border}`,
+                }}
+              >
+                <div
+                  className="text-sm"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
+                  Total Pending
+                </div>
+                <div
+                  className="text-2xl font-bold"
+                  style={{ color: COLORS.gold }}
+                >
+                  {requests.filter((r) => r.status === "pending").length}
+                </div>
+              </div>
+              <div
+                className="rounded-xl p-4"
+                style={{
+                  backgroundColor: COLORS.card,
+                  border: `1px solid ${COLORS.border}`,
+                }}
+              >
+                <div
+                  className="text-sm mb-1"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
+                  Total Approved
+                </div>
+                <div
+                  className="text-2xl font-bold"
+                  style={{ color: COLORS.green }}
+                >
+                  {requests.filter((r) => r.status === "approved").length}
+                </div>
+              </div>
+              <div
+                className="rounded-xl p-4"
+                style={{
+                  backgroundColor: COLORS.card,
+                  border: `1px solid ${COLORS.border}`,
+                }}
+              >
+                <div
+                  className="text-sm mb-1"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
+                  Total Amount Pending
+                </div>
+                <div
+                  className="text-2xl font-bold"
+                  style={{ color: COLORS.blue }}
+                >
+                  $
+                  {requests
+                    .filter((r) => r.status === "pending")
+                    .reduce((sum, r) => sum + r.requestedAmount, 0)
+                    .toLocaleString()}
+                </div>
+              </div>
             </div>
-            <div className="text-2xl font-bold" style={{ color: COLORS.gold }}>
-              {requests.filter(r => r.status === "pending").length}
-            </div>
-          </div>
-          <div
-            className="rounded-xl p-4"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="text-sm mb-1" style={{ color: COLORS.text, opacity: 0.7 }}>
-              Total Approved
-            </div>
-            <div className="text-2xl font-bold" style={{ color: COLORS.green }}>
-              {requests.filter(r => r.status === "approved").length}
-            </div>
-          </div>
-          <div
-            className="rounded-xl p-4"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="text-sm mb-1" style={{ color: COLORS.text, opacity: 0.7 }}>
-              Total Amount Pending
-            </div>
-            <div className="text-2xl font-bold" style={{ color: COLORS.blue }}>
-              ${requests.filter(r => r.status === "pending").reduce((sum, r) => sum + r.requestedAmount, 0).toLocaleString()}
-            </div>
-          </div>
-        </div>
           </div>
         </div>
 
@@ -371,7 +360,8 @@ const handleReject = async (id) => {
 
             {/* Status Filter */}
             <div className="flex gap-2">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg"
+              <div
+                className="flex items-center gap-2 px-3 py-2 rounded-lg"
                 style={{
                   backgroundColor: "rgba(255,255,255,0.05)",
                   border: `1px solid ${COLORS.border}`,
@@ -385,10 +375,42 @@ const handleReject = async (id) => {
                   className="bg-transparent outline-none text-sm"
                   style={{ color: COLORS.text }}
                 >
-                  <option value="all" style={{ backgroundColor: "rgba(255,255,255,0.7)", color: "#000" }}>All Status</option>
-                  <option value="pending" style={{ backgroundColor: "rgba(255,255,255,0.7)", color: "#000" }}>Pending</option>
-                  <option value="approved" style={{ backgroundColor: "rgba(255,255,255,0.7)", color: "#000" }}>Approved</option>
-                  <option value="rejected" style={{ backgroundColor: "rgba(255,255,255,0.7)", color: "#000" }}>Rejected</option>
+                  <option
+                    value="all"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.7)",
+                      color: "#000",
+                    }}
+                  >
+                    All Status
+                  </option>
+                  <option
+                    value="pending"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.7)",
+                      color: "#000",
+                    }}
+                  >
+                    Pending
+                  </option>
+                  <option
+                    value="approved"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.7)",
+                      color: "#000",
+                    }}
+                  >
+                    Approved
+                  </option>
+                  <option
+                    value="rejected"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.7)",
+                      color: "#000",
+                    }}
+                  >
+                    Rejected
+                  </option>
                 </select>
               </div>
             </div>
@@ -412,46 +434,69 @@ const handleReject = async (id) => {
                     borderBottom: `1px solid ${COLORS.border}`,
                   }}
                 >
-                  <th className="text-left whitespace-nowrap py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
+                  <th
+                    className="text-left whitespace-nowrap py-4 px-6 text-sm font-medium"
+                    style={{ color: COLORS.text }}
+                  >
                     User ID
                   </th>
-                  <th className="text-left py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
+                  <th
+                    className="text-left py-4 px-6 text-sm font-medium"
+                    style={{ color: COLORS.text }}
+                  >
                     Name
                   </th>
-                  <th className="text-left py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
+                  <th
+                    className="text-left py-4 px-6 text-sm font-medium"
+                    style={{ color: COLORS.text }}
+                  >
                     Email
                   </th>
-                  <th className="text-left py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
+                  <th
+                    className="text-left py-4 px-6 text-sm font-medium"
+                    style={{ color: COLORS.text }}
+                  >
                     Requested
                   </th>
                   {/* <th className="text-left whitespace-nowrap py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
                     Sent Amount
                   </th> */}
-                  <th className="text-left py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
+                  <th
+                    className="text-left py-4 px-6 text-sm font-medium"
+                    style={{ color: COLORS.text }}
+                  >
                     Status
                   </th>
-                  <th className="text-left py-4 px-6 text-sm font-medium" style={{ color: COLORS.text }}>
+                  <th
+                    className="text-left py-4 px-6 text-sm font-medium"
+                    style={{ color: COLORS.text }}
+                  >
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRequests.map((request) => (
-                  <tr 
+                  <tr
                     key={request.id}
                     style={{ borderBottom: `1px solid ${COLORS.border}` }}
                     className="hover:bg-white/5 transition-colors"
                   >
                     <td className="py-4 px-6" style={{ color: COLORS.text }}>
                       <div className="flex items-center gap-2">
-                       
                         <span className="font-medium">{request.userId}</span>
                       </div>
                     </td>
-                    <td className="py-4 whitespace-nowrap px-6" style={{ color: COLORS.text }}>
+                    <td
+                      className="py-4 whitespace-nowrap px-6"
+                      style={{ color: COLORS.text }}
+                    >
                       {request.name}
                     </td>
-                    <td className="py-4 px-6" style={{ color: COLORS.text, opacity: 0.9 }}>
+                    <td
+                      className="py-4 px-6"
+                      style={{ color: COLORS.text, opacity: 0.9 }}
+                    >
                       {request.email}
                     </td>
                     <td className="py-4 px-6" style={{ color: COLORS.blue }}>
@@ -473,7 +518,8 @@ const handleReject = async (id) => {
                           color: getStatusColor(request.status),
                         }}
                       >
-                        {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+                        {request.status.charAt(0).toUpperCase() +
+                          request.status.slice(1)}
                       </span>
                     </td>
                     <td className="py-4 px-6">
@@ -499,7 +545,9 @@ const handleReject = async (id) => {
                           </>
                         ) : request.rejectReason ? (
                           <button
-                            onClick={() => alert(`Rejection Reason: ${request.rejectReason}`)}
+                            onClick={() =>
+                              alert(`Rejection Reason: ${request.rejectReason}`)
+                            }
                             className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5"
                             style={{
                               backgroundColor: "rgba(239, 68, 68, 0.1)",
@@ -509,7 +557,9 @@ const handleReject = async (id) => {
                             <Eye size={14} /> View Reason
                           </button>
                         ) : (
-                          <span className="text-sm opacity-70 text-amber-50">Completed</span>
+                          <span className="text-sm opacity-70 text-amber-50">
+                            Completed
+                          </span>
                         )}
                       </div>
                     </td>
@@ -522,10 +572,14 @@ const handleReject = async (id) => {
           {/* Empty State */}
           {filteredRequests.length === 0 && (
             <div className="text-center py-12">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
+              <div
+                className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center"
                 style={{ backgroundColor: "rgba(255,255,255,0.05)" }}
               >
-                <Search size={32} style={{ color: COLORS.text, opacity: 0.3 }} />
+                <Search
+                  size={32}
+                  style={{ color: COLORS.text, opacity: 0.3 }}
+                />
               </div>
               <h3
                 className="text-xl font-bold mb-2"
@@ -537,8 +591,8 @@ const handleReject = async (id) => {
                 className="text-sm mb-6"
                 style={{ color: COLORS.text, opacity: 0.7 }}
               >
-                {searchQuery || statusFilter !== "all" 
-                  ? "Try adjusting your search or filter" 
+                {searchQuery || statusFilter !== "all"
+                  ? "Try adjusting your search or filter"
                   : "No trade wallet requests available"}
               </p>
             </div>
@@ -557,10 +611,7 @@ const handleReject = async (id) => {
             }}
           >
             <div className="flex items-center justify-between mb-6">
-              <h2
-                className="text-xl font-bold"
-                style={{ color: COLORS.text }}
-              >
+              <h2 className="text-xl font-bold" style={{ color: COLORS.text }}>
                 Reject Request
               </h2>
               <button
@@ -594,7 +645,10 @@ const handleReject = async (id) => {
                     color: COLORS.text,
                   }}
                 />
-                <p className="text-xs mt-2" style={{ color: COLORS.text, opacity: 0.7 }}>
+                <p
+                  className="text-xs mt-2"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
                   This reason will be shown to the user
                 </p>
               </div>

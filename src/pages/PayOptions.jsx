@@ -141,9 +141,8 @@ useEffect(() => {
               </p>
             </div>
           ) : (
-            cryptoList.map((crypto) => (
-              <div
-                key={crypto.id}
+            cryptoList.map((crypto, index) => (
+  <div key={index}
                 className="p-4 rounded-xl"
                 style={{
                   backgroundColor: COLORS.card,

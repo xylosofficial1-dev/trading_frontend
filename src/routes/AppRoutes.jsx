@@ -10,6 +10,9 @@ import ProtectedRoute from "../components/ProtectedRoute";
 import TradeWalletRequest from "../pages/TradeWalletRequest";
 import Videos from "../pages/Videos";
 import Markets from "../pages/Markets";
+import P2PAdmin from "../pages/P2p";
+import SwapHistory from "../pages/SwapHistory";
+
 
 export default function AppRoutes() {
   return (
@@ -33,6 +36,8 @@ export default function AppRoutes() {
           <Route path="/trade-wallet-request" element={<TradeWalletRequest />} />
 <Route path="/videos" element={<Videos />} />
 <Route path="/markets" element={<Markets />} />
+<Route path="p2p" element={<P2PAdmin />} />
+<Route path="/swap-history" element={<SwapHistory />} />
 
         </Route>
       </Routes>
