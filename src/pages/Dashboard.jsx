@@ -381,7 +381,7 @@ export default function Dashboard() {
               <button
                 onClick={handleCommission}
                 disabled={commissionLoading}
-                className="px-6 py-3 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap transition-all duration-200 hover:scale-[1.02]"
+                className="px-6 py-3 cursor-pointer rounded-lg font-medium flex items-center gap-2 whitespace-nowrap transition-all duration-200 hover:scale-[1.02]"
                 style={{
                   backgroundColor: COLORS.green,
                   color: "#FFFFFF",

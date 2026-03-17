@@ -12,6 +12,7 @@ import Videos from "../pages/Videos";
 import Markets from "../pages/Markets";
 import P2PAdmin from "../pages/P2p";
 import SwapHistory from "../pages/SwapHistory";
+import TaskSalaryHistory from "../pages/TaskSalaryHistory";
 
 
 export default function AppRoutes() {
@@ -38,7 +39,7 @@ export default function AppRoutes() {
 <Route path="/markets" element={<Markets />} />
 <Route path="p2p" element={<P2PAdmin />} />
 <Route path="/swap-history" element={<SwapHistory />} />
-
+<Route path="/task-salary-history" element={<TaskSalaryHistory />} />
         </Route>
       </Routes>
     </BrowserRouter>

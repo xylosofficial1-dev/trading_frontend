@@ -43,6 +43,7 @@ export default function Sidebar({ open }) {
     <aside
       className={`
         fixed md:static z-40 h-full w-64
+        flex flex-col
         transform ${open ? "translate-x-0" : "-translate-x-full"}
         md:translate-x-0 transition-transform duration-300
       `}
@@ -51,9 +52,9 @@ export default function Sidebar({ open }) {
         borderRight: `1px solid ${COLORS.border}`,
       }}
     >
-      {/* Logo / Title */}
+      {/* Logo / Title - Fixed at top */}
       <div 
-        className="h-16 flex items-center px-6"
+        className="flex-shrink-0 h-16 flex items-center px-6"
         style={{
           borderBottom: `1px solid ${COLORS.border}`,
         }}
@@ -74,84 +75,92 @@ export default function Sidebar({ open }) {
         </div>
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 px-3 py-6 space-y-1.5">
-        {/* Dashboard Section */}
-        <div className="px-4 mb-2">
-          <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.text, opacity: 0.5 }}>
-            Overview
-          </p>
-        </div>
-        
-        <SidebarLink
-          to="/"
-          end
-          icon={<LayoutDashboard size={18} />}
-          label="Dashboard"
-        />
+      {/* Scrollable Navigation Area */}
+      <div className="flex-1 overflow-y-auto min-h-0">
+        <nav className="px-3 py-6 space-y-1.5">
+          {/* Dashboard Section */}
+          <div className="px-4 mb-2">
+            <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.text, opacity: 0.5 }}>
+              Overview
+            </p>
+          </div>
+          
+          <SidebarLink
+            to="/"
+            end
+            icon={<LayoutDashboard size={18} />}
+            label="Dashboard"
+          />
 
-        {/* Management Section */}
-        <div className="px-4 mb-2 mt-6">
-          <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.text, opacity: 0.5 }}>
-            Management
-          </p>
-        </div>
-        
-        <SidebarLink
-          to="/users"
-          icon={<Users size={18} />}
-          label="User Management"
-        />
-        <SidebarLink
-          to="/notifications"
-          icon={<Bell size={18} />}
-          label="Notifications"
-        />
-        <SidebarLink
-          to="/payoptions"
-          icon={<CreditCard size={18} />}
-          label="Payment Options"
-        />
-        <SidebarLink
-          to="/wallet-request"
-          icon={<Wallet size={18} />}
-          label="Wallet Requests"
-        />
+          {/* Management Section */}
+          <div className="px-4 mb-2 mt-6">
+            <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.text, opacity: 0.5 }}>
+              Management
+            </p>
+          </div>
+          
+          <SidebarLink
+            to="/users"
+            icon={<Users size={18} />}
+            label="User Management"
+          />
+          <SidebarLink
+            to="/notifications"
+            icon={<Bell size={18} />}
+            label="Notifications"
+          />
+          <SidebarLink
+            to="/payoptions"
+            icon={<CreditCard size={18} />}
+            label="Payment Options"
+          />
+          <SidebarLink
+            to="/wallet-request"
+            icon={<Wallet size={18} />}
+            label="Wallet Requests"
+          />
 
-<SidebarLink
-  to="/trade-wallet-request"
-  icon={<Activity size={18} />}
-  label="Trade Wallet Request"
-/>
+          <SidebarLink
+            to="/trade-wallet-request"
+            icon={<Activity size={18} />}
+            label="Trade Wallet Request"
+          />
 
-<SidebarLink
-  to="/videos"
-  icon={<PieChart size={18} />}
-  label="Videos"
-/>
+          <SidebarLink
+            to="/videos"
+            icon={<PieChart size={18} />}
+            label="Videos"
+          />
 
-<SidebarLink
-  to="/markets"
-  icon={<BarChart3 size={18} />}
-  label="Markets"
-/>
-<SidebarLink
-  to="/p2p"
-  icon={<Repeat size={18} />}
-  label="P2P Trading"
-/>
-<SidebarLink
-  to="/swap-history"
-  icon={<Repeat size={18} />}
-  label="Swap History"
-/>
-      </nav>
+          <SidebarLink
+            to="/markets"
+            icon={<BarChart3 size={18} />}
+            label="Markets"
+          />
+          <SidebarLink
+            to="/p2p"
+            icon={<Repeat size={18} />}
+            label="P2P Trading"
+          />
+          <SidebarLink
+            to="/swap-history"
+            icon={<Repeat size={18} />}
+            label="Swap History"
+          />
+          <SidebarLink
+            to="/task-salary-history"
+            icon={<Shield size={18} />}
+            label="Task & Salary History"
+          />
+        </nav>
+      </div>
 
-      {/* Logout */}
+      {/* Logout - Fixed at bottom */}
       <div 
-        className="p-4 mt-28" 
+        className="flex-shrink-0 p-4" 
         style={{
           borderTop: `1px solid ${COLORS.border}`,
+          backgroundColor: COLORS.sidebarBg, // Ensures background matches when scrolling
         }}
       >
         <button
