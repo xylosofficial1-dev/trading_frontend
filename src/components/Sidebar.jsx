@@ -112,7 +112,7 @@ export default function Sidebar({ open }) {
           <SidebarLink
             to="/payoptions"
             icon={<CreditCard size={18} />}
-            label="Payment Options"
+            label="Payment & support"
           />
           <SidebarLink
             to="/wallet-request"
@@ -152,6 +152,12 @@ export default function Sidebar({ open }) {
             icon={<Shield size={18} />}
             label="Task & Salary History"
           />
+
+          <SidebarLink
+  to="/withdrawal-request"
+  icon={<Wallet size={18} />}
+  label="Withdrawal Request"
+/>
         </nav>
       </div>
 

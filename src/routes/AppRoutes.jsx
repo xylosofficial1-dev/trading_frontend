@@ -13,7 +13,7 @@ import Markets from "../pages/Markets";
 import P2PAdmin from "../pages/P2p";
 import SwapHistory from "../pages/SwapHistory";
 import TaskSalaryHistory from "../pages/TaskSalaryHistory";
-
+import WithdrawalRequest from "../pages/WithdrawalRequest";
 
 export default function AppRoutes() {
   return (
@@ -40,6 +40,7 @@ export default function AppRoutes() {
 <Route path="p2p" element={<P2PAdmin />} />
 <Route path="/swap-history" element={<SwapHistory />} />
 <Route path="/task-salary-history" element={<TaskSalaryHistory />} />
+<Route path="/withdrawal-request" element={<WithdrawalRequest />} />
         </Route>
       </Routes>
     </BrowserRouter>
