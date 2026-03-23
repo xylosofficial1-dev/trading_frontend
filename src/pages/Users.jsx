@@ -116,18 +116,20 @@ const confirmStatusChange = async () => {
   }
 };
 
-  // Filter users based on search term and status
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = 
-      user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      user.phone.includes(searchTerm) ||
-      user.wallet_address.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === "all" || user.status === statusFilter;
-    
-    return matchesSearch && matchesStatus;
-  });
+const filteredUsers = users.filter((user) => {
+  const search = searchTerm.toLowerCase();
+
+  const matchesSearch =
+    (user.name || "").toLowerCase().includes(search) ||
+    (user.email || "").toLowerCase().includes(search) ||
+    (user.phone || "").includes(search) ||
+    (user.wallet_address || "").toLowerCase().includes(search);
+
+  const matchesStatus =
+    statusFilter === "all" || user.status === statusFilter;
+
+  return matchesSearch && matchesStatus;
+});
 
   // Calculate pagination
   const totalPages = Math.ceil(filteredUsers.length / usersPerPage);
@@ -445,7 +447,7 @@ const confirmStatusChange = async () => {
                     </button>
                     <div>
                       <p style={{ color: COLORS.text }} className="font-medium">
-                        {user.name} {getGenderSymbol(user.gender)}
+                        {user.name || "N/A"} {getGenderSymbol(user.gender)}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         <p className="text-xs" style={{ color: COLORS.text, opacity: 0.6 }}>
