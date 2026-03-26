@@ -41,7 +41,7 @@ export default function P2PAdmin() {
     p2p_buy_requests: [],
     p2p_trade_history: [],
     users: [],
-    notifications: [],
+    notifications: [], 
   });
   const [loading, setLoading] = useState(false);
 
@@ -296,7 +296,7 @@ export default function P2PAdmin() {
                 <div className="text-sm opacity-70 mb-1" style={{ color: COLORS.text }}>
                   Bank Details
                 </div>
-                <div className="text-sm p-3 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.05)" }}>
+                <div className="text-sm text-amber-50 p-3 rounded-lg" style={{ backgroundColor: "rgba(255,255,255,0.05)" }}>
                   {details.bank_details}
                 </div>
               </div>

@@ -3,7 +3,7 @@ import {
   Users, 
   Wallet, 
   DollarSign, 
-  TrendingUp, 
+  TrendingUp,  
   Clock, 
   CheckCircle, 
   XCircle,

@@ -1,5 +1,5 @@
 // admin/src/pages/Markets.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -15,6 +15,7 @@ import {
   Percent,
   Package,
   DollarSign,
+  AlertCircle,
 } from "lucide-react";
 
 const COLORS = {
@@ -30,27 +31,27 @@ const COLORS = {
   orange: "#F59E0B",
   pink: "#EC4899",
   teal: "#14B8A6",
+  yellow: "#FBBF24",
 };
 
-// Binance symbols to fetch
-const BINANCE_SYMBOLS = [
-  "BTCUSDT",
-  "ETHUSDT",
-  "BNBUSDT",
-  "SOLUSDT",
-  "DOGEUSDT",
-  "PEPEUSDT",
-  "SHIBUSDT",
-  "ADAUSDT",
-  "DOTUSDT",
-  "AVAXUSDT",
-];
 const API = `${import.meta.env.VITE_API_URL}/api/admin/market`;
 
+// Format numbers with K, M, B suffixes
 const formatNumber = (num) => {
+  if (num === undefined || num === null) return "0";
   if (num >= 1e9) return (num / 1e9).toFixed(2) + "B";
   if (num >= 1e6) return (num / 1e6).toFixed(2) + "M";
   if (num >= 1e3) return (num / 1e3).toFixed(2) + "K";
+  return num.toFixed(2);
+};
+
+// Format price with appropriate decimals
+const formatPrice = (price) => {
+  const num = parseFloat(price);
+  if (isNaN(num)) return "0";
+  if (num < 0.01) return num.toFixed(6);
+  if (num < 1) return num.toFixed(4);
+  if (num < 100) return num.toFixed(2);
   return num.toFixed(2);
 };
 
@@ -64,8 +65,72 @@ const handleResetAllRates = async () => {
   loadCustomRates(); // reload UI
 };
 
+// Cache for exchange info
+let exchangeInfoCache = null;
+let exchangeInfoPromise = null;
+
+const fetchExchangeInfo = async () => {
+  if (exchangeInfoCache) return exchangeInfoCache;
+  if (exchangeInfoPromise) return exchangeInfoPromise;
+
+  exchangeInfoPromise = fetch("https://api.binance.com/api/v3/exchangeInfo")
+    .then(res => res.json())
+    .then(data => {
+      exchangeInfoCache = data;
+      return data;
+    })
+    .catch(err => {
+      console.error("Failed to fetch exchange info:", err);
+      exchangeInfoPromise = null;
+      throw err;
+    });
+
+  return exchangeInfoPromise;
+};
+
+// Fetch all USDT pairs
+const fetchAllUSDTickers = async () => {
+  try {
+    // First, get exchange info to filter USDT pairs
+    const exchangeInfo = await fetchExchangeInfo();
+    const usdtSymbols = exchangeInfo.symbols
+      .filter(s => s.quoteAsset === "USDT" && s.status === "TRADING")
+      .map(s => s.symbol);
+    
+    console.log(`Found ${usdtSymbols.length} USDT trading pairs`);
+    
+    // Fetch tickers in batches (max 100 symbols per request)
+    const batchSize = 100;
+    const allTickers = [];
+    
+    for (let i = 0; i < usdtSymbols.length; i += batchSize) {
+      const batch = usdtSymbols.slice(i, i + batchSize);
+      const symbolsParam = JSON.stringify(batch);
+      try {
+        const response = await fetch(
+          `https://api.binance.com/api/v3/ticker/24hr?symbols=${encodeURIComponent(symbolsParam)}`
+        );
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          allTickers.push(...data);
+        }
+        // Add delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 200));
+      } catch (err) {
+        console.error(`Failed to fetch batch ${i}:`, err);
+      }
+    }
+    
+    return allTickers;
+  } catch (err) {
+    console.error("Failed to fetch all USDT tickers:", err);
+    throw err;
+  }
+};
+
 export default function Markets() {
   const [marketCoins, setMarketCoins] = useState([]);
+  const [allCoins, setAllCoins] = useState([]);
   const [adminCoins, setAdminCoins] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adminLoading, setAdminLoading] = useState(true);
@@ -87,18 +152,16 @@ export default function Markets() {
     total_value: "",
   });
   const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [error, setError] = useState(null);
+  const [totalCoins, setTotalCoins] = useState(0);
+  const [displayLimit, setDisplayLimit] = useState(100);
+  const [searchType, setSearchType] = useState("all"); // 'all' or 'admin'
+  const [showAllCoins, setShowAllCoins] = useState(false);
+  
+  const loadCustomRatesRef = useRef();
 
-  // Fetch market data from Binance API
-  useEffect(() => {
-    loadCustomRates(); // once
-    fetchMarketData(); // every 10s
-    fetchAdminCoins();
-
-    const interval = setInterval(fetchMarketData, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadCustomRates = async () => {
+  // Load custom rates function
+  const loadCustomRates = useCallback(async () => {
     try {
       const rateRes = await fetch(`${API}/custom-rates`);
       const savedRates = await rateRes.json();
@@ -110,18 +173,17 @@ export default function Markets() {
     } catch (e) {
       console.error("Failed loading custom rates");
     }
-  };
+  }, []);
 
-  const fetchMarketData = async () => {
+  // Fetch all market data from Binance
+  const fetchMarketData = useCallback(async () => {
     try {
       setLoading(true);
-      const symbolsParam = JSON.stringify(BINANCE_SYMBOLS);
-      const res = await fetch(
-        `https://api.binance.com/api/v3/ticker/24hr?symbols=${symbolsParam}`,
-      );
-      const data = await res.json();
-
-      const formatted = data.map((coin, index) => ({
+      setError(null);
+      
+      const tickers = await fetchAllUSDTickers();
+      
+      const formatted = tickers.map((coin) => ({
         id: coin.symbol,
         symbol: coin.symbol.replace("USDT", ""),
         name: coin.symbol.replace("USDT", ""),
@@ -135,24 +197,32 @@ export default function Markets() {
         volumeRaw: coin.volume,
         quoteVolume: coin.quoteVolume,
         // UI Formatted Values
-        price: Number(coin.lastPrice).toFixed(4),
+        price: formatPrice(coin.lastPrice),
         change: `${Number(coin.priceChangePercent) >= 0 ? "+" : ""}${Number(coin.priceChangePercent).toFixed(2)}%`,
         volume: formatNumber(Number(coin.quoteVolume)),
         isPositive: Number(coin.priceChangePercent) >= 0,
         color: Number(coin.priceChangePercent) >= 0 ? COLORS.green : COLORS.red,
       }));
-
-      setMarketCoins(formatted);
-
+      
+      // Sort by volume (highest first) for better visibility
+      const sorted = formatted.sort((a, b) => 
+        parseFloat(b.quoteVolume || 0) - parseFloat(a.quoteVolume || 0)
+      );
+      
+      setAllCoins(sorted);
+      setMarketCoins(sorted.slice(0, displayLimit));
+      setTotalCoins(sorted.length);
       setLastUpdated(new Date());
     } catch (err) {
       console.error("Failed to fetch market data:", err);
+      setError("Failed to fetch market data. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
-  };
+  }, [displayLimit]);
 
-  const saveCustomRate = async (symbol, value) => {
+  // Save custom rate
+  const saveCustomRate = useCallback(async (symbol, value) => {
     setCustomRates((prev) => ({ ...prev, [symbol]: value }));
 
     await fetch(`${API}/custom-rate`, {
@@ -160,15 +230,41 @@ export default function Markets() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol, rate: value }),
     });
-  };
+  }, []);
 
-  const fetchAdminCoins = async () => {
+  // Fetch admin coins
+  const fetchAdminCoins = useCallback(async () => {
     setAdminLoading(true);
     const res = await fetch(`${API}/admin-coins`);
     const data = await res.json();
     setAdminCoins(data);
     setAdminLoading(false);
-  };
+  }, []);
+
+  // Initial load
+  useEffect(() => {
+    loadCustomRatesRef.current = loadCustomRates;
+    loadCustomRatesRef.current();
+    fetchMarketData();
+    fetchAdminCoins();
+
+    const interval = setInterval(() => {
+      fetchMarketData();
+    }, 30000); // Update every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [fetchMarketData, fetchAdminCoins]);
+
+  // Update displayed coins when display limit changes
+  useEffect(() => {
+    if (allCoins.length > 0) {
+      if (showAllCoins) {
+        setMarketCoins(allCoins);
+      } else {
+        setMarketCoins(allCoins.slice(0, displayLimit));
+      }
+    }
+  }, [displayLimit, allCoins, showAllCoins]);
 
   const handleCustomEditStart = (symbol, currentRate) => {
     setEditingCustom(symbol);
@@ -215,6 +311,13 @@ export default function Markets() {
     });
 
     setShowAddModal(false);
+    setNewAdminCoin({
+      name: "",
+      symbol: "",
+      rate: "",
+      quantity: "",
+      total_value: "",
+    });
     fetchAdminCoins();
   };
 
@@ -228,12 +331,6 @@ export default function Markets() {
     fetchAdminCoins();
   };
 
-  const filteredMarketCoins = marketCoins.filter(
-    (coin) =>
-      coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      coin.symbol.toLowerCase().includes(searchQuery.toLowerCase()),
-  );
-
   const handleCustomIncrement = (symbol) => {
     const current = Number(customRates[symbol] ?? 0);
     const newValue = Number((current + 0.5).toFixed(1));
@@ -246,11 +343,33 @@ export default function Markets() {
     saveCustomRate(symbol, newValue);
   };
 
+  // Filter coins based on search
+  const filteredMarketCoins = marketCoins.filter(
+    (coin) =>
+      coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const filteredAdminCoins = adminCoins.filter(
     (coin) =>
       coin.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      coin.symbol.toLowerCase().includes(searchQuery.toLowerCase()),
+      coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const handleShowMore = () => {
+    setDisplayLimit(prev => Math.min(prev + 100, totalCoins));
+  };
+
+  const handleShowAll = () => {
+    setShowAllCoins(true);
+    setMarketCoins(allCoins);
+  };
+
+  const handleShowLess = () => {
+    setShowAllCoins(false);
+    setDisplayLimit(100);
+    setMarketCoins(allCoins.slice(0, 100));
+  };
 
   return (
     <div
@@ -271,7 +390,7 @@ export default function Markets() {
               className="text-sm mt-1"
               style={{ color: COLORS.text, opacity: 0.7 }}
             >
-              Live cryptocurrency data from Binance • Admin customization panel
+              Live cryptocurrency data from Binance • {totalCoins}+ coins available
             </p>
           </div>
 
@@ -284,38 +403,22 @@ export default function Markets() {
                 color: COLORS.text,
               }}
             >
-              <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>
-  <button
-    onClick={handleResetAllRates}
-    style={{
-      display: "flex",
-      alignItems: "center",
-      gap: "8px",
-      background: "linear-gradient(135deg, #EF4444, #B91C1C)",
-      color: "#fff",
-      padding: "10px 18px",
-      border: "none",
-      borderRadius: "8px",
-      fontWeight: "600",
-      cursor: "pointer",
-      boxShadow: "0 4px 12px rgba(239,68,68,0.4)",
-      transition: "0.3s ease",
-    }}
-    onMouseOver={(e) =>
-      (e.currentTarget.style.transform = "scale(1.05)")
-    }
-    onMouseOut={(e) =>
-      (e.currentTarget.style.transform = "scale(1)")
-    }
-  >
-    <RefreshCw size={16} />
-    Reset All Rates
-  </button>
-</div>
-              <span className="opacity-70">Last updated:</span>{" "}
-              <span className="font-medium">
-                {lastUpdated.toLocaleTimeString()}
-              </span>
+              <div className="flex gap-4">
+                <button
+                  onClick={handleResetAllRates}
+                  className="flex items-center gap-2 px-3 py-1 rounded-lg hover:bg-red-500/20 transition-colors"
+                  style={{ color: COLORS.red }}
+                >
+                  <RefreshCw size={14} />
+                  Reset All Rates
+                </button>
+              </div>
+              <div className="mt-1">
+                <span className="opacity-70">Last updated:</span>{" "}
+                <span className="font-medium">
+                  {lastUpdated.toLocaleTimeString()}
+                </span>
+              </div>
             </div>
             <button
               onClick={fetchMarketData}
@@ -324,11 +427,37 @@ export default function Markets() {
                 color: COLORS.text,
                 border: `1px solid ${COLORS.border}`,
               }}
+              disabled={loading}
             >
               <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
+
+        {/* Error Message */}
+        {error && (
+          <div
+            className="mb-6 p-4 rounded-xl flex items-center gap-3"
+            style={{
+              backgroundColor: `${COLORS.red}20`,
+              border: `1px solid ${COLORS.red}`,
+              color: COLORS.red,
+            }}
+          >
+            <AlertCircle size={20} />
+            <span>{error}</span>
+            <button
+              onClick={fetchMarketData}
+              className="ml-auto px-3 py-1 rounded-lg text-sm"
+              style={{
+                backgroundColor: COLORS.red,
+                color: "#fff",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="mb-6">
@@ -353,547 +482,667 @@ export default function Markets() {
           </div>
         </div>
 
-        {/* Market Coins Section */}
-        <div className="mb-8">
-          <h2
-            className="text-xl font-semibold mb-4"
-            style={{ color: COLORS.text }}
-          >
-            Live Market Data (Binance)
-          </h2>
-
-          <div
-            className="rounded-2xl overflow-hidden"
+        {/* Tabs */}
+        <div className="flex gap-2 mb-6 border-b" style={{ borderColor: COLORS.border }}>
+          <button
+            onClick={() => setSearchType("all")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              searchType === "all"
+                ? "border-b-2"
+                : "opacity-60 hover:opacity-100"
+            }`}
             style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
+              borderColor: searchType === "all" ? COLORS.gold : "transparent",
+              color: COLORS.text,
             }}
           >
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr
-                    style={{
-                      backgroundColor: "rgba(255,255,255,0.02)",
-                      borderBottom: `1px solid ${COLORS.border}`,
-                    }}
-                  >
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Coin
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Price (USD)
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      24h Change
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Volume
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Custom Rate
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="6" className="py-8 text-center">
-                        <div className="flex justify-center">
-                          <RefreshCw
-                            size={24}
-                            className="animate-spin"
-                            style={{ color: COLORS.text, opacity: 0.5 }}
-                          />
-                        </div>
-                        <p
-                          className="mt-2 text-sm"
-                          style={{ color: COLORS.text, opacity: 0.7 }}
-                        >
-                          Loading market data...
-                        </p>
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredMarketCoins.map((coin) => (
-                      <tr
-                        key={coin.id}
-                        style={{ borderBottom: `1px solid ${COLORS.border}` }}
-                        className="hover:bg-white/5 transition-colors"
-                      >
-                        <td className="py-4 px-6">
-                          <div>
-                            <div
-                              className="font-bold"
-                              style={{ color: COLORS.text }}
-                            >
-                              {coin.symbol}
-                            </div>
-                            <div
-                              className="text-xs"
-                              style={{ color: COLORS.text, opacity: 0.7 }}
-                            >
-                              {coin.name}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <div
-                            className="font-medium"
-                            style={{ color: COLORS.blue }}
-                          >
-                            ${coin.price}
-                          </div>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span
-                            className="px-2 py-1 rounded-lg text-xs font-medium"
-                            style={{
-                              backgroundColor: coin.isPositive
-                                ? `${COLORS.green}20`
-                                : `${COLORS.red}20`,
-                              color: coin.isPositive
-                                ? COLORS.green
-                                : COLORS.red,
-                            }}
-                          >
-                            {coin.change}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span style={{ color: COLORS.text }}>
-                            ${coin.volume}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6">
-                          {editingCustom === coin.symbol ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                value={editValue}
-                                onChange={(e) => setEditValue(e.target.value)}
-                                className="px-2 py-1 rounded-lg w-20 text-sm"
-                                style={{
-                                  backgroundColor: "rgba(255,255,255,0.05)",
-                                  border: `1px solid ${COLORS.border}`,
-                                  color: COLORS.text,
-                                }}
-                                step="0.1"
-                              />
-                              <span style={{ color: COLORS.text }}>%</span>
-                              <button
-                                onClick={() =>
-                                  handleCustomEditSave(coin.symbol)
-                                }
-                                className="p-1 rounded-lg hover:bg-white/10"
-                                style={{ color: COLORS.green }}
-                              >
-                                <Save size={16} />
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEditingCustom(null);
-                                  setEditValue("");
-                                }}
-                                className="p-1 rounded-lg hover:bg-white/10"
-                                style={{ color: COLORS.red }}
-                              >
-                                <X size={16} />
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-3">
-                              <span
-                                className="px-2 py-1 rounded-lg text-sm font-medium min-w-[60px] text-center"
-                                style={{
-                                  backgroundColor:
-                                    (customRates[coin.symbol] ?? 0) >= 0
-                                      ? `${COLORS.green}20`
-                                      : `${COLORS.red}20`,
-                                  color:
-                                    (customRates[coin.symbol] ?? 0) >= 0
-                                      ? COLORS.green
-                                      : COLORS.red,
-                                }}
-                              >
-                                {(customRates[coin.symbol] ?? 0) >= 0
-                                  ? "+"
-                                  : ""}
-                                {customRates[coin.symbol] ?? 0}%
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-1">
-                            <button
-                              onClick={() => handleCustomIncrement(coin.symbol)}
-                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                              style={{ color: COLORS.green }}
-                              title="Increase by 0.5%"
-                            >
-                              <ChevronUp size={18} />
-                            </button>
-                            <button
-                              onClick={() => handleCustomDecrement(coin.symbol)}
-                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                              style={{ color: COLORS.red }}
-                              title="Decrease by 0.5%"
-                            >
-                              <ChevronDown size={18} />
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleCustomEditStart(
-                                  coin.symbol,
-                                  customRates[coin.symbol] ?? 0,
-                                )
-                              }
-                              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                              style={{ color: COLORS.blue }}
-                              title="Edit custom rate"
-                            >
-                              <Edit size={16} />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+            All Coins ({totalCoins})
+          </button>
+          <button
+            onClick={() => setSearchType("admin")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              searchType === "admin"
+                ? "border-b-2"
+                : "opacity-60 hover:opacity-100"
+            }`}
+            style={{
+              borderColor: searchType === "admin" ? COLORS.gold : "transparent",
+              color: COLORS.text,
+            }}
+          >
+            Admin Coins ({adminCoins.length})
+          </button>
         </div>
 
-        {/* Admin Coins Section */}
-        <div className="mt-8">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
-            <div>
+        {/* Market Coins Section */}
+        {searchType === "all" && (
+          <div className="mb-8">
+            <div className="flex justify-between items-center mb-4">
               <h2
                 className="text-xl font-semibold"
                 style={{ color: COLORS.text }}
               >
-                Admin Managed Coins
+                Live Market Data (Binance)
               </h2>
-              <p
-                className="text-xs mt-1"
-                style={{ color: COLORS.text, opacity: 0.7 }}
-              >
-                Custom rates and quantities for platform management
-              </p>
-            </div>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all hover:scale-105"
-              style={{
-                backgroundColor: COLORS.gold,
-                color: "#000000",
-              }}
-            >
-              <Plus size={18} />
-              Add New Coin
-            </button>
-          </div>
-
-          <div
-            className="rounded-2xl overflow-hidden"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr
+              {!showAllCoins && totalCoins > displayLimit && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleShowMore}
+                    className="px-3 py-1 rounded-lg text-sm"
                     style={{
-                      backgroundColor: "rgba(255,255,255,0.02)",
-                      borderBottom: `1px solid ${COLORS.border}`,
+                      backgroundColor: "rgba(255,255,255,0.05)",
+                      color: COLORS.blue,
+                      border: `1px solid ${COLORS.border}`,
                     }}
                   >
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Coin Name
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Symbol
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Rate (%)
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Quantity
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Total Value
-                    </th>
-                    <th
-                      className="text-left py-4 px-6 text-sm font-medium"
-                      style={{ color: COLORS.text }}
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {adminLoading ? (
-                    <tr>
-                      <td colSpan="6" className="py-8 text-center">
-                        <div className="flex justify-center">
-                          <RefreshCw
-                            size={24}
-                            className="animate-spin"
-                            style={{ color: COLORS.text, opacity: 0.5 }}
-                          />
-                        </div>
-                        <p
-                          className="mt-2 text-sm"
-                          style={{ color: COLORS.text, opacity: 0.7 }}
-                        >
-                          Loading admin coins...
-                        </p>
-                      </td>
-                    </tr>
-                  ) : filteredAdminCoins.length > 0 ? (
-                    filteredAdminCoins.map((coin) => (
-                      <tr
-                        key={coin.id}
-                        style={{ borderBottom: `1px solid ${COLORS.border}` }}
-                        className="hover:bg-white/5 transition-colors"
-                      >
-                        <td className="py-4 px-6">
-                          <span style={{ color: COLORS.text, fontWeight: 500 }}>
-                            {coin.name}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6">
-                          <span style={{ color: COLORS.text }}>
-                            {coin.symbol}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6">
-                          {editingAdminCoin === coin.id ? (
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                value={adminEditValue.rate}
-                                onChange={(e) =>
-                                  setAdminEditValue((prev) => ({
-                                    ...prev,
-                                    rate: e.target.value,
-                                  }))
-                                }
-                                className="px-2 py-1 rounded-lg w-20 text-sm"
-                                style={{
-                                  backgroundColor: "rgba(255,255,255,0.05)",
-                                  border: `1px solid ${COLORS.border}`,
-                                  color: COLORS.text,
-                                }}
-                                step="0.1"
-                              />
-                              <span style={{ color: COLORS.text }}>%</span>
-                            </div>
-                          ) : (
-                            <span
-                              className="px-2 py-1 rounded-lg text-sm font-medium"
-                              style={{
-                                backgroundColor:
-                                  coin.rate >= 0
-                                    ? `${COLORS.green}20`
-                                    : `${COLORS.red}20`,
-                                color:
-                                  coin.rate >= 0 ? COLORS.green : COLORS.red,
-                              }}
-                            >
-                              {coin.rate >= 0 ? "+" : ""}
-                              {coin.rate}%
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6">
-                          {editingAdminCoin === coin.id ? (
-                            <input
-                              type="number"
-                              value={adminEditValue.quantity}
-                              onChange={(e) =>
-                                setAdminEditValue((prev) => ({
-                                  ...prev,
-                                  quantity: e.target.value,
-                                }))
-                              }
-                              className="px-2 py-1 rounded-lg w-24 text-sm"
-                              style={{
-                                backgroundColor: "rgba(255,255,255,0.05)",
-                                border: `1px solid ${COLORS.border}`,
-                                color: COLORS.text,
-                              }}
-                              step="0.01"
-                            />
-                          ) : (
-                            <span style={{ color: COLORS.text }}>
-                              {coin.quantity.toLocaleString(undefined, {
-                                maximumFractionDigits: 2,
-                              })}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6">
-                          {editingAdminCoin === coin.id ? (
-                            <input
-                              type="number"
-                              value={adminEditValue.total_value}
-                              onChange={(e) =>
-                                setAdminEditValue((prev) => ({
-                                  ...prev,
-                                  total_value: e.target.value,
-                                }))
-                              }
-                              className="px-2 py-1 rounded-lg w-28 text-sm"
-                              style={{
-                                backgroundColor: "rgba(255,255,255,0.05)",
-                                border: `1px solid ${COLORS.border}`,
-                                color: COLORS.text,
-                              }}
-                              step="0.01"
-                            />
-                          ) : (
-                            <span
-                              style={{ color: COLORS.blue, fontWeight: 500 }}
-                            >
-                              $
-                              {(coin.total_value || 0).toLocaleString(
-                                undefined,
-                                {
-                                  maximumFractionDigits: 2,
-                                },
-                              )}
-                            </span>
-                          )}
-                        </td>
+                    Show More (+100)
+                  </button>
+                  <button
+                    onClick={handleShowAll}
+                    className="px-3 py-1 rounded-lg text-sm"
+                    style={{
+                      backgroundColor: "rgba(255,255,255,0.05)",
+                      color: COLORS.gold,
+                      border: `1px solid ${COLORS.border}`,
+                    }}
+                  >
+                    Show All ({totalCoins})
+                  </button>
+                </div>
+              )}
+              {showAllCoins && (
+                <button
+                  onClick={handleShowLess}
+                  className="px-3 py-1 rounded-lg text-sm"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    color: COLORS.orange,
+                    border: `1px solid ${COLORS.border}`,
+                  }}
+                >
+                  Show Less (Top 100)
+                </button>
+              )}
+            </div>
 
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-2">
-                            {editingAdminCoin === coin.id ? (
-                              <>
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.02)",
+                        borderBottom: `1px solid ${COLORS.border}`,
+                      }}
+                    >
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        #
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Coin
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Price (USD)
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        24h Change
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        24h Volume
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Custom Rate
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading && filteredMarketCoins.length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="py-8 text-center">
+                          <div className="flex justify-center">
+                            <RefreshCw
+                              size={24}
+                              className="animate-spin"
+                              style={{ color: COLORS.text, opacity: 0.5 }}
+                            />
+                          </div>
+                          <p
+                            className="mt-2 text-sm"
+                            style={{ color: COLORS.text, opacity: 0.7 }}
+                          >
+                            Loading {totalCoins}+ coins from Binance...
+                          </p>
+                        </td>
+                      </tr>
+                    ) : filteredMarketCoins.length > 0 ? (
+                      filteredMarketCoins.map((coin, index) => (
+                        <tr
+                          key={coin.id}
+                          style={{ borderBottom: `1px solid ${COLORS.border}` }}
+                          className="hover:bg-white/5 transition-colors"
+                        >
+                          <td className="py-4 px-6">
+                            <span
+                              className="text-sm"
+                              style={{ color: COLORS.text, opacity: 0.6 }}
+                            >
+                              {index + 1}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div>
+                              <div
+                                className="font-bold"
+                                style={{ color: COLORS.text }}
+                              >
+                                {coin.symbol}
+                              </div>
+                              <div
+                                className="text-xs"
+                                style={{ color: COLORS.text, opacity: 0.7 }}
+                              >
+                                {coin.name}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div
+                              className="font-medium"
+                              style={{ color: COLORS.blue }}
+                            >
+                              ${coin.price}
+                            </div>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span
+                              className="px-2 py-1 rounded-lg text-xs font-medium"
+                              style={{
+                                backgroundColor: coin.isPositive
+                                  ? `${COLORS.green}20`
+                                  : `${COLORS.red}20`,
+                                color: coin.isPositive
+                                  ? COLORS.green
+                                  : COLORS.red,
+                              }}
+                            >
+                              {coin.change}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span style={{ color: COLORS.text }}>
+                              ${coin.volume}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            {editingCustom === coin.symbol ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  value={editValue}
+                                  onChange={(e) => setEditValue(e.target.value)}
+                                  className="px-2 py-1 rounded-lg w-20 text-sm"
+                                  style={{
+                                    backgroundColor: "rgba(255,255,255,0.05)",
+                                    border: `1px solid ${COLORS.border}`,
+                                    color: COLORS.text,
+                                  }}
+                                  step="0.1"
+                                />
+                                <span style={{ color: COLORS.text }}>%</span>
                                 <button
-                                  onClick={() => handleAdminEditSave(coin.id)}
-                                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                  onClick={() =>
+                                    handleCustomEditSave(coin.symbol)
+                                  }
+                                  className="p-1 rounded-lg hover:bg-white/10"
                                   style={{ color: COLORS.green }}
-                                  title="Save"
                                 >
                                   <Save size={16} />
                                 </button>
                                 <button
                                   onClick={() => {
-                                    setEditingAdminCoin(null);
-                                    setAdminEditValue({
-                                      rate: "",
-                                      quantity: "",
-                                      total_value: "",
-                                    });
+                                    setEditingCustom(null);
+                                    setEditValue("");
                                   }}
-                                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                  className="p-1 rounded-lg hover:bg-white/10"
                                   style={{ color: COLORS.red }}
-                                  title="Cancel"
                                 >
                                   <X size={16} />
                                 </button>
-                              </>
+                              </div>
                             ) : (
-                              <>
-                                <button
-                                  onClick={() => handleAdminEditStart(coin)}
-                                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                                  style={{ color: COLORS.blue }}
-                                  title="Edit coin"
+                              <div className="flex items-center gap-3">
+                                <span
+                                  className="px-2 py-1 rounded-lg text-sm font-medium min-w-[60px] text-center"
+                                  style={{
+                                    backgroundColor:
+                                      (customRates[coin.symbol] ?? 0) >= 0
+                                        ? `${COLORS.green}20`
+                                        : `${COLORS.red}20`,
+                                    color:
+                                      (customRates[coin.symbol] ?? 0) >= 0
+                                        ? COLORS.green
+                                        : COLORS.red,
+                                  }}
                                 >
-                                  <Edit size={16} />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteAdminCoin(coin.id)}
-                                  className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                                  style={{ color: COLORS.red }}
-                                  title="Delete coin"
-                                >
-                                  <Trash2 size={16} />
-                                </button>
-                              </>
+                                  {(customRates[coin.symbol] ?? 0) >= 0
+                                    ? "+"
+                                    : ""}
+                                  {customRates[coin.symbol] ?? 0}%
+                                </span>
+                              </div>
                             )}
-                          </div>
+                          </td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => handleCustomIncrement(coin.symbol)}
+                                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                style={{ color: COLORS.green }}
+                                title="Increase by 0.5%"
+                              >
+                                <ChevronUp size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleCustomDecrement(coin.symbol)}
+                                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                style={{ color: COLORS.red }}
+                                title="Decrease by 0.5%"
+                              >
+                                <ChevronDown size={18} />
+                              </button>
+                              <button
+                                onClick={() =>
+                                  handleCustomEditStart(
+                                    coin.symbol,
+                                    customRates[coin.symbol] ?? 0,
+                                  )
+                                }
+                                className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                style={{ color: COLORS.blue }}
+                                title="Edit custom rate"
+                              >
+                                <Edit size={16} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="py-8 text-center">
+                          <p
+                            className="text-sm"
+                            style={{ color: COLORS.text, opacity: 0.7 }}
+                          >
+                            No coins found matching "{searchQuery}"
+                          </p>
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="6" className="py-8 text-center">
-                        <div className="flex flex-col items-center">
-                          <Package
-                            size={40}
-                            style={{ color: COLORS.text, opacity: 0.3 }}
-                          />
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            
+            {/* Loading indicator for background fetching */}
+            {loading && filteredMarketCoins.length > 0 && (
+              <div className="flex justify-center items-center gap-2 mt-4">
+                <RefreshCw
+                  size={16}
+                  className="animate-spin"
+                  style={{ color: COLORS.text, opacity: 0.5 }}
+                />
+                <span
+                  className="text-xs"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
+                  Refreshing data...
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Admin Coins Section */}
+        {searchType === "admin" && (
+          <div className="mt-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2
+                  className="text-xl font-semibold"
+                  style={{ color: COLORS.text }}
+                >
+                  Admin Managed Coins
+                </h2>
+                <p
+                  className="text-xs mt-1"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
+                  Custom rates and quantities for platform management
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2 transition-all hover:scale-105"
+                style={{
+                  backgroundColor: COLORS.gold,
+                  color: "#000000",
+                }}
+              >
+                <Plus size={18} />
+                Add New Coin
+              </button>
+            </div>
+
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.02)",
+                        borderBottom: `1px solid ${COLORS.border}`,
+                      }}
+                    >
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Coin Name
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Symbol
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Rate (%)
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Quantity
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Total Value
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminLoading ? (
+                      <tr>
+                        <td colSpan="6" className="py-8 text-center">
+                          <div className="flex justify-center">
+                            <RefreshCw
+                              size={24}
+                              className="animate-spin"
+                              style={{ color: COLORS.text, opacity: 0.5 }}
+                            />
+                          </div>
                           <p
                             className="mt-2 text-sm"
                             style={{ color: COLORS.text, opacity: 0.7 }}
                           >
-                            No admin coins added yet
+                            Loading admin coins...
                           </p>
-                          <button
-                            onClick={() => setShowAddModal(true)}
-                            className="mt-3 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
-                            style={{
-                              backgroundColor: "rgba(255,255,255,0.05)",
-                              color: COLORS.text,
-                              border: `1px solid ${COLORS.border}`,
-                            }}
-                          >
-                            <Plus size={16} />
-                            Add Your First Coin
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                        </td>
+                      </tr>
+                    ) : filteredAdminCoins.length > 0 ? (
+                      filteredAdminCoins.map((coin) => (
+                        <tr
+                          key={coin.id}
+                          style={{ borderBottom: `1px solid ${COLORS.border}` }}
+                          className="hover:bg-white/5 transition-colors"
+                        >
+                          <td className="py-4 px-6">
+                            <span style={{ color: COLORS.text, fontWeight: 500 }}>
+                              {coin.name}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            <span style={{ color: COLORS.text }}>
+                              {coin.symbol}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6">
+                            {editingAdminCoin === coin.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="number"
+                                  value={adminEditValue.rate}
+                                  onChange={(e) =>
+                                    setAdminEditValue((prev) => ({
+                                      ...prev,
+                                      rate: e.target.value,
+                                    }))
+                                  }
+                                  className="px-2 py-1 rounded-lg w-20 text-sm"
+                                  style={{
+                                    backgroundColor: "rgba(255,255,255,0.05)",
+                                    border: `1px solid ${COLORS.border}`,
+                                    color: COLORS.text,
+                                  }}
+                                  step="0.1"
+                                />
+                                <span style={{ color: COLORS.text }}>%</span>
+                              </div>
+                            ) : (
+                              <span
+                                className="px-2 py-1 rounded-lg text-sm font-medium"
+                                style={{
+                                  backgroundColor:
+                                    coin.rate >= 0
+                                      ? `${COLORS.green}20`
+                                      : `${COLORS.red}20`,
+                                  color:
+                                    coin.rate >= 0 ? COLORS.green : COLORS.red,
+                                }}
+                              >
+                                {coin.rate >= 0 ? "+" : ""}
+                                {coin.rate}%
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6">
+                            {editingAdminCoin === coin.id ? (
+                              <input
+                                type="number"
+                                value={adminEditValue.quantity}
+                                onChange={(e) =>
+                                  setAdminEditValue((prev) => ({
+                                    ...prev,
+                                    quantity: e.target.value,
+                                  }))
+                                }
+                                className="px-2 py-1 rounded-lg w-24 text-sm"
+                                style={{
+                                  backgroundColor: "rgba(255,255,255,0.05)",
+                                  border: `1px solid ${COLORS.border}`,
+                                  color: COLORS.text,
+                                }}
+                                step="0.01"
+                              />
+                            ) : (
+                              <span style={{ color: COLORS.text }}>
+                                {coin.quantity.toLocaleString(undefined, {
+                                  maximumFractionDigits: 2,
+                                })}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6">
+                            {editingAdminCoin === coin.id ? (
+                              <input
+                                type="number"
+                                value={adminEditValue.total_value}
+                                onChange={(e) =>
+                                  setAdminEditValue((prev) => ({
+                                    ...prev,
+                                    total_value: e.target.value,
+                                  }))
+                                }
+                                className="px-2 py-1 rounded-lg w-28 text-sm"
+                                style={{
+                                  backgroundColor: "rgba(255,255,255,0.05)",
+                                  border: `1px solid ${COLORS.border}`,
+                                  color: COLORS.text,
+                                }}
+                                step="0.01"
+                              />
+                            ) : (
+                              <span
+                                style={{ color: COLORS.blue, fontWeight: 500 }}
+                              >
+                                $
+                                {(coin.total_value || 0).toLocaleString(
+                                  undefined,
+                                  {
+                                    maximumFractionDigits: 2,
+                                  },
+                                )}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-2">
+                              {editingAdminCoin === coin.id ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminEditSave(coin.id)}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    style={{ color: COLORS.green }}
+                                    title="Save"
+                                  >
+                                    <Save size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEditingAdminCoin(null);
+                                      setAdminEditValue({
+                                        rate: "",
+                                        quantity: "",
+                                        total_value: "",
+                                      });
+                                    }}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    style={{ color: COLORS.red }}
+                                    title="Cancel"
+                                  >
+                                    <X size={16} />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminEditStart(coin)}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    style={{ color: COLORS.blue }}
+                                    title="Edit coin"
+                                  >
+                                    <Edit size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteAdminCoin(coin.id)}
+                                    className="p-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                                    style={{ color: COLORS.red }}
+                                    title="Delete coin"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="6" className="py-8 text-center">
+                          <div className="flex flex-col items-center">
+                            <Package
+                              size={40}
+                              style={{ color: COLORS.text, opacity: 0.3 }}
+                            />
+                            <p
+                              className="mt-2 text-sm"
+                              style={{ color: COLORS.text, opacity: 0.7 }}
+                            >
+                              {searchQuery
+                                ? `No admin coins found matching "${searchQuery}"`
+                                : "No admin coins added yet"}
+                            </p>
+                            <button
+                              onClick={() => setShowAddModal(true)}
+                              className="mt-3 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
+                              style={{
+                                backgroundColor: "rgba(255,255,255,0.05)",
+                                color: COLORS.text,
+                                border: `1px solid ${COLORS.border}`,
+                              }}
+                            >
+                              <Plus size={16} />
+                              Add Your First Coin
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* Add Admin Coin Modal */}
         {showAddModal && (
@@ -920,6 +1169,7 @@ export default function Markets() {
                       symbol: "",
                       rate: "",
                       quantity: "",
+                      total_value: "",
                     });
                   }}
                   className="p-2 rounded-lg hover:bg-white/10 transition-colors"
@@ -1083,6 +1333,7 @@ export default function Markets() {
                         symbol: "",
                         rate: "",
                         quantity: "",
+                        total_value: "",
                       });
                     }}
                     className="flex-1 py-3 rounded-lg font-medium"
@@ -1116,8 +1367,7 @@ export default function Markets() {
           style={{ color: COLORS.text, opacity: 0.5 }}
         >
           <p>
-            Market data from Binance API • Updates every 10 seconds • Custom
-            rates are for admin use only and don't affect API data
+            Market data from Binance API • {totalCoins}+ coins available • Updates every 30 seconds • Custom rates are for admin use only and don't affect API data
           </p>
         </div>
       </div>
