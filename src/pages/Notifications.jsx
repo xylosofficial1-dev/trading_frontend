@@ -11,6 +11,9 @@ import {
   Users,
   XCircle,
   Send,
+  Menu,
+  X,
+  ChevronRight
 } from "lucide-react";
 
 // ================= COLORS =================
@@ -25,7 +28,6 @@ const COLORS = {
 
 // ================= API =================
 const API = `${import.meta.env.VITE_API_URL}/api/notifications`;
-// const API = "https://trading-backend-1rq6.onrender.com/api/notifications";
 
 export default function Notifications() {
   const [notifications, setNotifications] = useState([]);
@@ -33,7 +35,9 @@ export default function Notifications() {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [filterTarget, setFilterTarget] = useState("all");
-  const [customTargetInput, setCustomTargetInput] = useState(""); // Fixed: Added missing state
+  const [customTargetInput, setCustomTargetInput] = useState("");
+  const [expandedNotifId, setExpandedNotifId] = useState(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -53,14 +57,14 @@ export default function Notifications() {
       const data = await res.json();
 
       setNotifications(
-  data.map((n) => ({
-    id: n.id,
-    title: n.title,
-    message: n.message,
-    target: n.target_type === "custom" ? n.target_users : "all",
-    created: new Date(n.created_at).toLocaleString(),
-  }))
-);
+        data.map((n) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          target: n.target_type === "custom" ? n.target_users : "all",
+          created: new Date(n.created_at).toLocaleString(),
+        }))
+      );
     } catch (err) {
       console.error("Failed to load notifications", err);
     }
@@ -85,15 +89,12 @@ export default function Notifications() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
- const payload = {
-  title: formData.title,
-  message: formData.message,
-  target: formData.target,              // "all" OR "custom"
-  customIds:
-    formData.target === "custom"
-      ? formData.customIds.trim()
-      : null,
-};
+    const payload = {
+      title: formData.title,
+      message: formData.message,
+      target: formData.target,
+      customIds: formData.target === "custom" ? formData.customIds.trim() : null,
+    };
 
     try {
       if (editingId) {
@@ -135,6 +136,11 @@ export default function Notifications() {
   const getTargetIcon = (target) =>
     target === "all" ? <Globe size={14} /> : <Users size={14} />;
 
+  const getTargetText = (target) => {
+    if (target === "all") return "All Users";
+    return `Custom (${target})`;
+  };
+
   // ================= FILTER LOGIC =================
   const filteredNotifications = notifications
     .filter((n) =>
@@ -147,33 +153,34 @@ export default function Notifications() {
         n.id.toString().includes(searchTerm)
     );
 
-  // Use filteredNotifications for display (fixed the variable name)
   const displayedNotifications = filteredNotifications;
 
+  const toggleExpandNotif = (id) => {
+    setExpandedNotifId(expandedNotifId === id ? null : id);
+  };
+
   return (
-    <div className="min-h-[33em] p-4 md:px-6 py-2" style={{ backgroundColor: COLORS.bg }}>
-      
+    <div className="min-h-screen p-3 sm:p-4 md:p-6" style={{ backgroundColor: COLORS.bg }}>
       <div className="max-w-5xl mx-auto">
-        {/* Header with Add Button on right */}
-        <div className="flex items-center justify-between mb-4">
+        {/* Header with Add Button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-2xl md:text-2xl font-bold" style={{ color: COLORS.gold }}>
+            <h1 className="text-xl sm:text-2xl font-bold" style={{ color: COLORS.gold }}>
               Notifications
             </h1>
-            <p className="text-sm" style={{ color: COLORS.text, opacity: 0.7 }}>
+            <p className="text-xs sm:text-sm mt-1" style={{ color: COLORS.text, opacity: 0.7 }}>
               Manage system notifications and user alerts
             </p>
           </div>
           
-          <div className="flex items-center gap-4">
-            <span style={{ color: COLORS.text, fontSize: '14px' }}>
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            <span className="text-sm" style={{ color: COLORS.text, opacity: 0.7 }}>
               Total: {notifications.length}
             </span>
             
-            {/* Add Button */}
             <button
               onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-200 hover:bg-opacity-90"
+              className="flex items-center gap-2 px-3 sm:px-4 py-2 rounded-xl transition-all duration-200 text-sm sm:text-base"
               style={{
                 backgroundColor: COLORS.gold,
                 color: "#000",
@@ -181,146 +188,317 @@ export default function Notifications() {
               }}
             >
               <Plus size={16} />
-              Add Notification
+              <span className="hidden sm:inline">Add Notification</span>
+              <span className="sm:hidden">Add</span>
             </button>
           </div>
         </div>
 
         {/* Search and Filter */}
-        <div className="p-2 rounded-2xl mb-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2" size={18} style={{ color: COLORS.text, opacity: 0.5 }} />
-              <input
-                type="text"
-                placeholder="Search notifications..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 rounded-xl"
+        <div className="p-3 sm:p-4 rounded-2xl mb-4" style={{ backgroundColor: COLORS.card, border: `1px solid ${COLORS.border}` }}>
+          <div className="flex flex-col gap-3">
+            <div className="flex gap-2">
+              <div className="flex-1 relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2" size={16} style={{ color: COLORS.text, opacity: 0.5 }} />
+                <input
+                  type="text"
+                  placeholder="Search..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-xl text-sm"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    border: `1px solid ${COLORS.border}`,
+                    color: COLORS.text,
+                  }}
+                />
+              </div>
+              
+              <button
+                onClick={() => setShowMobileFilters(!showMobileFilters)}
+                className="md:hidden px-3 py-2 rounded-xl flex items-center gap-2"
                 style={{
                   backgroundColor: "rgba(255,255,255,0.05)",
                   border: `1px solid ${COLORS.border}`,
                   color: COLORS.text,
                 }}
-              />
-            </div>
-            
-            {/* Filter Dropdown */}
-            <div className="flex items-center gap-2">
-              <div className="relative">
-                <select
-                  value={filterTarget}
-                  onChange={(e) => setFilterTarget(e.target.value)}
-                  className="appearance-none bg-black/70 flex items-center gap-2 px-4 py-2.5 rounded-xl pr-8"
-                  style={{  
-                    border: `1px solid ${COLORS.border}`, 
-                    color: COLORS.text 
-                  }}
-                >
-                  <option value="all">All Users</option>
-                  <option value="custom">Custom Users</option>
-                </select>
-                <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" size={16} style={{ color: COLORS.text, opacity: 0.7 }} />
+              >
+                <Filter size={16} />
+              </button>
+
+              {/* Desktop Filter Dropdown */}
+              <div className="hidden md:flex items-center gap-2">
+                <div className="relative">
+                  <select
+                    value={filterTarget}
+                    onChange={(e) => setFilterTarget(e.target.value)}
+                    className="appearance-none bg-black/70 flex items-center gap-2 px-4 py-2 rounded-xl pr-8 text-sm"
+                    style={{  
+                      border: `1px solid ${COLORS.border}`, 
+                      color: COLORS.text 
+                    }}
+                  >
+                    <option value="all">All Users</option>
+                    <option value="custom">Custom Users</option>
+                  </select>
+                  <Filter className="absolute right-3 top-1/2 transform -translate-y-1/2 pointer-events-none" size={14} style={{ color: COLORS.text, opacity: 0.7 }} />
+                </div>
               </div>
-              
             </div>
+
+            {/* Mobile Filters */}
+            {showMobileFilters && (
+              <div className="md:hidden p-3 rounded-xl" style={{ backgroundColor: "rgba(255,255,255,0.03)" }}>
+                <label className="text-sm block mb-2" style={{ color: COLORS.text, opacity: 0.7 }}>
+                  Filter by Target:
+                </label>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setFilterTarget("all");
+                      setShowMobileFilters(false);
+                    }}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm transition-colors ${filterTarget === "all" ? "font-medium" : ""}`}
+                    style={{
+                      backgroundColor: filterTarget === "all" ? COLORS.gold : "rgba(255,255,255,0.05)",
+                      color: filterTarget === "all" ? "#000" : COLORS.text,
+                    }}
+                  >
+                    All Users
+                  </button>
+                  <button
+                    onClick={() => {
+                      setFilterTarget("custom");
+                      setShowMobileFilters(false);
+                    }}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm transition-colors ${filterTarget === "custom" ? "font-medium" : ""}`}
+                    style={{
+                      backgroundColor: filterTarget === "custom" ? COLORS.gold : "rgba(255,255,255,0.05)",
+                      color: filterTarget === "custom" ? "#000" : COLORS.text,
+                    }}
+                  >
+                    Custom Users
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Notifications Table */}
-        <div className="rounded-2xl overflow-hidden no-scrollbar" style={{ 
-          backgroundColor: COLORS.card, 
-          border: `1px solid ${COLORS.border}`,
-          maxHeight: "calc(100vh - 280px)",
-          overflowY: "auto"
-        }}>
-          {/* Table Header */}
-          <div className="grid grid-cols-12 p-4 sticky top-0" style={{ 
-            borderBottom: `1px solid ${COLORS.border}`, 
-            backgroundColor: "rgba(13,13,13,0.95)",
-            backdropFilter: "blur(8px)",
-            zIndex: 10
+        {/* Desktop Table View */}
+        <div className="hidden md:block">
+          <div className="rounded-2xl overflow-hidden" style={{ 
+            backgroundColor: COLORS.card, 
+            border: `1px solid ${COLORS.border}`,
           }}>
-            <div className="col-span-1 font-medium" style={{ color: COLORS.text }}>ID</div>
-            <div className="col-span-3 font-medium" style={{ color: COLORS.text }}>Title</div>
-            <div className="col-span-3 font-medium" style={{ color: COLORS.text }}>Message</div>
-            <div className="col-span-2 font-medium" style={{ color: COLORS.text }}>Target</div>
-            <div className="col-span-2 font-medium" style={{ color: COLORS.text }}>Actions</div>
-          </div>
+            {/* Table Header */}
+            <div className="grid grid-cols-12 p-4" style={{ 
+              borderBottom: `1px solid ${COLORS.border}`, 
+              backgroundColor: "rgba(13,13,13,0.95)",
+            }}>
+              <div className="col-span-1 font-medium text-sm" style={{ color: COLORS.text }}>ID</div>
+              <div className="col-span-3 font-medium text-sm" style={{ color: COLORS.text }}>Title</div>
+              <div className="col-span-3 font-medium text-sm" style={{ color: COLORS.text }}>Message</div>
+              <div className="col-span-2 font-medium text-sm" style={{ color: COLORS.text }}>Target</div>
+              <div className="col-span-3 font-medium text-sm" style={{ color: COLORS.text }}>Actions</div>
+            </div>
 
-          {/* Table Body */}
+            {/* Table Body */}
+            {displayedNotifications.length === 0 ? (
+              <div className="p-8 text-center">
+                <Bell size={48} className="mx-auto mb-4" style={{ color: COLORS.text, opacity: 0.3 }} />
+                <p style={{ color: COLORS.text, opacity: 0.7 }}>No notifications found</p>
+              </div>
+            ) : (
+              displayedNotifications.map((notif) => (
+                <div key={notif.id} className="grid grid-cols-12 p-4 hover:bg-white/5 transition-colors border-b" style={{ borderColor: COLORS.border }}>
+                  {/* ID */}
+                  <div className="col-span-1 flex items-center">
+                    <span style={{ color: COLORS.text }} className="font-mono text-sm">#{notif.id}</span>
+                  </div>
+
+                  {/* Title */}
+                  <div className="col-span-3">
+                    <p className="font-medium text-sm" style={{ color: COLORS.text }}>{notif.title}</p>
+                    <p className="text-xs mt-1" style={{ color: COLORS.text, opacity: 0.6 }}>{notif.created}</p>
+                  </div>
+
+                  {/* Message */}
+                  <div className="col-span-3">
+                    <p className="text-sm line-clamp-2" style={{ color: COLORS.text, opacity: 0.9 }}>{notif.message}</p>
+                  </div>
+
+                  {/* Target */}
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-2">
+                      {getTargetIcon(notif.target)}
+                      <span className="text-sm" style={{ color: COLORS.text }}>
+                        {getTargetText(notif.target)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="col-span-3 flex items-center gap-2">
+                    <button
+                      onClick={() => handleDelete(notif.id)}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors text-sm"
+                      style={{ color: COLORS.negative }}
+                    >
+                      <Trash2 size={14} />
+                      <span>Delete</span>
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Card View */}
+        <div className="md:hidden space-y-3">
           {displayedNotifications.length === 0 ? (
-            <div className="p-8 text-center">
+            <div className="p-8 text-center rounded-2xl" style={{ backgroundColor: COLORS.card }}>
               <Bell size={48} className="mx-auto mb-4" style={{ color: COLORS.text, opacity: 0.3 }} />
               <p style={{ color: COLORS.text, opacity: 0.7 }}>No notifications found</p>
             </div>
           ) : (
             displayedNotifications.map((notif) => (
-              <div key={notif.id} className="grid grid-cols-12 p-4 hover:bg-white/5 transition-colors border-b" style={{ borderColor: COLORS.border }}>
-                {/* ID */}
-                <div className="col-span-1 flex items-center">
-                  <span style={{ color: COLORS.text }} className="font-mono">#{notif.id}</span>
-                </div>
-
-                {/* Title */}
-                <div className="col-span-3">
-                  <p className="font-medium" style={{ color: COLORS.text }}>{notif.title}</p>
-                  <p className="text-xs mt-1" style={{ color: COLORS.text, opacity: 0.6 }}>{notif.created}</p>
-                </div>
-
-                {/* Message */}
-                <div className="col-span-3">
-                  <p className="text-sm" style={{ color: COLORS.text, opacity: 0.9 }}>{notif.message}</p>
-                </div>
-
-                {/* Target */}
-                <div className="col-span-2">
-                  <div className="flex items-center text-amber-50 gap-2">
-                    {getTargetIcon(notif.target)}
-                    <span className="text-sm" style={{ color: COLORS.text }}>
-                      {notif.target === 'all' ? 'All Users' : `Users: ${notif.target}`}
-                    </span>
+              <div
+                key={notif.id}
+                className="rounded-2xl overflow-hidden"
+                style={{
+                  backgroundColor: COLORS.card,
+                  border: `1px solid ${COLORS.border}`,
+                }}
+              >
+                {/* Card Header */}
+                <div 
+                  className="p-4 cursor-pointer"
+                  onClick={() => toggleExpandNotif(notif.id)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-mono text-xs px-2 py-1 rounded" style={{ backgroundColor: "rgba(255,255,255,0.05)", color: COLORS.gold }}>
+                          #{notif.id}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          {getTargetIcon(notif.target)}
+                          <span className="text-xs" style={{ color: COLORS.text, opacity: 0.7 }}>
+                            {getTargetText(notif.target)}
+                          </span>
+                        </div>
+                      </div>
+                      <h3 className="font-medium text-base mb-1" style={{ color: COLORS.text }}>
+                        {notif.title}
+                      </h3>
+                      <p className="text-sm line-clamp-2" style={{ color: COLORS.text, opacity: 0.8 }}>
+                        {notif.message}
+                      </p>
+                      <p className="text-xs mt-2" style={{ color: COLORS.text, opacity: 0.5 }}>
+                        {notif.created}
+                      </p>
+                    </div>
+                    <ChevronRight 
+                      size={18} 
+                      className={`transition-transform ${expandedNotifId === notif.id ? 'rotate-90' : ''}`}
+                      style={{ color: COLORS.text, opacity: 0.6 }}
+                    />
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="col-span-2 flex items-center gap-2">
-                 
-                  <button
-                    onClick={() => handleDelete(notif.id)}
-                    className="flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
-                    style={{ color: COLORS.negative }}
-                  >
-                    <Trash2 size={14} />
-                    <span className="text-sm">Delete</span>
-                  </button>
-                </div>
+                {/* Expanded Actions */}
+                {expandedNotifId === notif.id && (
+                  <div className="px-4 pb-4 pt-2 border-t" style={{ borderColor: COLORS.border }}>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleDelete(notif.id)}
+                        className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg transition-colors text-sm"
+                        style={{
+                          backgroundColor: "rgba(239,68,68,0.1)",
+                          color: COLORS.negative,
+                        }}
+                      >
+                        <Trash2 size={14} />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))
           )}
         </div>
+
+        {/* Tablet View (Medium screens) */}
+        <div className="hidden sm:block md:hidden">
+          <div className="rounded-2xl overflow-hidden" style={{ 
+            backgroundColor: COLORS.card, 
+            border: `1px solid ${COLORS.border}`,
+          }}>
+            {displayedNotifications.length === 0 ? (
+              <div className="p-8 text-center">
+                <Bell size={48} className="mx-auto mb-4" style={{ color: COLORS.text, opacity: 0.3 }} />
+                <p style={{ color: COLORS.text, opacity: 0.7 }}>No notifications found</p>
+              </div>
+            ) : (
+              displayedNotifications.map((notif) => (
+                <div key={notif.id} className="p-4 hover:bg-white/5 transition-colors border-b" style={{ borderColor: COLORS.border }}>
+                  <div className="flex justify-between items-start mb-3">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-xs px-2 py-1 rounded" style={{ backgroundColor: "rgba(255,255,255,0.05)", color: COLORS.gold }}>
+                        #{notif.id}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        {getTargetIcon(notif.target)}
+                        <span className="text-xs" style={{ color: COLORS.text, opacity: 0.7 }}>
+                          {getTargetText(notif.target)}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDelete(notif.id)}
+                      className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/10 transition-colors"
+                      style={{ color: COLORS.negative }}
+                    >
+                      <Trash2 size={14} />
+                      <span className="text-sm">Delete</span>
+                    </button>
+                  </div>
+                  <h3 className="font-medium text-base mb-2" style={{ color: COLORS.text }}>
+                    {notif.title}
+                  </h3>
+                  <p className="text-sm mb-2" style={{ color: COLORS.text, opacity: 0.8 }}>
+                    {notif.message}
+                  </p>
+                  <p className="text-xs" style={{ color: COLORS.text, opacity: 0.5 }}>
+                    {notif.created}
+                  </p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Popup Modal for Add/Edit Form */}
+      {/* Popup Modal for Add/Edit Form - Responsive */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 overflow-y-auto no-scrollbar">
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
           <div
-            className="w-full max-w-lg rounded-2xl my-8 modal-scrollbar"
+            className="w-full max-w-lg rounded-2xl my-4 sm:my-8 mx-4"
             style={{
               backgroundColor: COLORS.card,
               border: `1px solid ${COLORS.border}`,
               boxShadow: "0 25px 50px -12px rgba(0,0,0,0.9)",
-              maxHeight: "90vh",
-              overflowY: "auto"
             }}
           >
             {/* Modal Header */}
-            <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0" style={{ 
+            <div className="px-4 sm:px-6 py-4 border-b flex items-center justify-between sticky top-0" style={{ 
               borderColor: COLORS.border,
               backgroundColor: COLORS.card,
-              zIndex: 1
             }}>
-              <h2 className="text-xl font-bold" style={{ color: COLORS.gold }}>
+              <h2 className="text-lg sm:text-xl font-bold" style={{ color: COLORS.gold }}>
                 {editingId ? 'Edit Notification' : 'Add New Notification'}
               </h2>
               <button
@@ -333,7 +511,7 @@ export default function Notifications() {
             </div>
 
             {/* Modal Body - Form */}
-            <form onSubmit={handleSubmit} className="px-6 py-4 space-y-2">
+            <form onSubmit={handleSubmit} className="px-4 sm:px-6 py-4 space-y-4">
               {/* Title Field */}
               <div>
                 <label className="text-sm mb-2 block font-medium" style={{ color: COLORS.text }}>
@@ -344,7 +522,7 @@ export default function Notifications() {
                   name="title"
                   value={formData.title}
                   onChange={handleInputChange}
-                  className="w-full p-3 rounded-xl"
+                  className="w-full p-3 rounded-xl text-sm sm:text-base"
                   style={{
                     backgroundColor: "rgba(255,255,255,0.05)",
                     border: `1px solid ${COLORS.border}`,
@@ -365,7 +543,8 @@ export default function Notifications() {
                   name="message"
                   value={formData.message}
                   onChange={handleInputChange}
-                  className="w-full p-3 rounded-xl resize-none"
+                  rows={4}
+                  className="w-full p-3 rounded-xl resize-none text-sm sm:text-base"
                   style={{
                     backgroundColor: "rgba(255,255,255,0.05)",
                     border: `1px solid ${COLORS.border}`,
@@ -377,7 +556,7 @@ export default function Notifications() {
               </div>
 
               {/* Target Field */}
-              <div className="mb-4">
+              <div>
                 <label className="text-sm mb-2 block font-medium" style={{ color: COLORS.text }}>
                   Target Users
                 </label>
@@ -385,7 +564,7 @@ export default function Notifications() {
                   name="target"
                   value={formData.target}
                   onChange={handleTargetChange}
-                  className="w-full p-3 rounded-xl mb-2 bg-black/70"
+                  className="w-full p-3 rounded-xl mb-2 bg-black/70 text-sm sm:text-base"
                   style={{
                     border: `1px solid ${COLORS.border}`,
                     color: COLORS.text,
@@ -403,7 +582,7 @@ export default function Notifications() {
                     value={formData.customIds}
                     onChange={handleInputChange}
                     placeholder="Enter user IDs (comma separated, e.g., 1,2,3,4)"
-                    className="w-full p-3 rounded-xl"
+                    className="w-full p-3 rounded-xl text-sm sm:text-base"
                     style={{
                       backgroundColor: "rgba(255,255,255,0.05)",
                       border: `1px solid ${COLORS.border}`,
@@ -415,11 +594,11 @@ export default function Notifications() {
               </div>
 
               {/* Modal Footer */}
-              <div className="pt-4 border-t flex gap-3" style={{ borderColor: COLORS.border }}>
+              <div className="pt-4 border-t flex flex-col sm:flex-row gap-3" style={{ borderColor: COLORS.border }}>
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="flex-1 py-3 rounded-xl font-medium transition-colors"
+                  className="flex-1 py-3 rounded-xl font-medium transition-colors text-sm sm:text-base order-2 sm:order-1"
                   style={{
                     backgroundColor: "rgba(255,255,255,0.05)",
                     color: COLORS.text,
@@ -429,7 +608,7 @@ export default function Notifications() {
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 hover:bg-opacity-90"
+                  className="flex-1 py-3 rounded-xl font-medium transition-colors flex items-center justify-center gap-2 hover:bg-opacity-90 text-sm sm:text-base order-1 sm:order-2"
                   style={{
                     backgroundColor: COLORS.gold,
                     color: "#000",
