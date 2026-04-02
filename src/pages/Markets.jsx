@@ -896,7 +896,7 @@ export default function Markets() {
                         className="text-left py-4 px-6 text-sm font-medium"
                         style={{ color: COLORS.text }}
                       >
-                        Rate (%)
+                        Profit (%)
                       </th>
                       <th
                         className="text-left py-4 px-6 text-sm font-medium"
@@ -1237,7 +1237,7 @@ export default function Markets() {
                     className="block text-sm font-medium mb-2"
                     style={{ color: COLORS.text }}
                   >
-                    Rate (%)
+                    Profit (%)
                   </label>
                   <div className="flex items-center gap-2">
                     <Percent

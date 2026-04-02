@@ -434,7 +434,7 @@ const filteredUsers = users.filter((user) => {
                 key={user.id}
                 className="grid grid-cols-12 p-4 hover:bg-white/5 transition-colors border-b"
                 style={{ borderColor: COLORS.border }}
-              >
+              >  
                 {/* User Info - Fixed alignment */}
                 <div className="col-span-3 pl-3">
                   <div className="flex items-center gap-2">
