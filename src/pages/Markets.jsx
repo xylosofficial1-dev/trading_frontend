@@ -35,6 +35,7 @@ const COLORS = {
 };
 
 const API = `${import.meta.env.VITE_API_URL}/api/admin/market`;
+const TRADES_API = `${import.meta.env.VITE_API_URL}/api/trades/all`;
 
 // Format numbers with K, M, B suffixes
 const formatNumber = (num) => {
@@ -132,8 +133,10 @@ export default function Markets() {
   const [marketCoins, setMarketCoins] = useState([]);
   const [allCoins, setAllCoins] = useState([]);
   const [adminCoins, setAdminCoins] = useState([]);
+  const [trades, setTrades] = useState([]);
   const [loading, setLoading] = useState(true);
   const [adminLoading, setAdminLoading] = useState(true);
+  const [tradesLoading, setTradesLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [customRates, setCustomRates] = useState({});
   const [editingCustom, setEditingCustom] = useState(null);
@@ -154,9 +157,7 @@ export default function Markets() {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [error, setError] = useState(null);
   const [totalCoins, setTotalCoins] = useState(0);
-  const [displayLimit, setDisplayLimit] = useState(100);
-  const [searchType, setSearchType] = useState("all"); // 'all' or 'admin'
-  const [showAllCoins, setShowAllCoins] = useState(false);
+  const [searchType, setSearchType] = useState("all"); // 'all', 'admin', or 'manual'
   
   const loadCustomRatesRef = useRef();
 
@@ -210,7 +211,7 @@ export default function Markets() {
       );
       
       setAllCoins(sorted);
-      setMarketCoins(sorted.slice(0, displayLimit));
+      setMarketCoins(sorted); // Show ALL coins, no limit
       setTotalCoins(sorted.length);
       setLastUpdated(new Date());
     } catch (err) {
@@ -219,7 +220,21 @@ export default function Markets() {
     } finally {
       setLoading(false);
     }
-  }, [displayLimit]);
+  }, []);
+
+  // Fetch trades data
+  const fetchTrades = useCallback(async () => {
+    try {
+      setTradesLoading(true);
+      const response = await fetch(TRADES_API);
+      const data = await response.json();
+      setTrades(data);
+    } catch (err) {
+      console.error("Failed to fetch trades:", err);
+    } finally {
+      setTradesLoading(false);
+    }
+  }, []);
 
   // Save custom rate
   const saveCustomRate = useCallback(async (symbol, value) => {
@@ -247,24 +262,21 @@ export default function Markets() {
     loadCustomRatesRef.current();
     fetchMarketData();
     fetchAdminCoins();
+    fetchTrades();
 
     const interval = setInterval(() => {
       fetchMarketData();
     }, 30000); // Update every 30 seconds
 
-    return () => clearInterval(interval);
-  }, [fetchMarketData, fetchAdminCoins]);
+    const tradesInterval = setInterval(() => {
+      fetchTrades();
+    }, 10000); // Update trades every 10 seconds
 
-  // Update displayed coins when display limit changes
-  useEffect(() => {
-    if (allCoins.length > 0) {
-      if (showAllCoins) {
-        setMarketCoins(allCoins);
-      } else {
-        setMarketCoins(allCoins.slice(0, displayLimit));
-      }
-    }
-  }, [displayLimit, allCoins, showAllCoins]);
+    return () => {
+      clearInterval(interval);
+      clearInterval(tradesInterval);
+    };
+  }, [fetchMarketData, fetchAdminCoins, fetchTrades]);
 
   const handleCustomEditStart = (symbol, currentRate) => {
     setEditingCustom(symbol);
@@ -356,19 +368,62 @@ export default function Markets() {
       coin.symbol.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleShowMore = () => {
-    setDisplayLimit(prev => Math.min(prev + 100, totalCoins));
+  const filteredTrades = trades.filter(
+    (trade) =>
+      trade.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      trade.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      trade.coin?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return "—";
+    const date = new Date(dateString);
+    return date.toLocaleString();
   };
 
-  const handleShowAll = () => {
-    setShowAllCoins(true);
-    setMarketCoins(allCoins);
+  // Get status badge color
+  const getStatusBadge = (status) => {
+    if (status === "open") {
+      return {
+        bg: `${COLORS.green}20`,
+        color: COLORS.green,
+        label: "Open",
+      };
+    } else if (status === "closed") {
+      return {
+        bg: `${COLORS.red}20`,
+        color: COLORS.red,
+        label: "Closed",
+      };
+    }
+    return {
+      bg: "rgba(255,255,255,0.05)",
+      color: COLORS.text,
+      label: status || "—",
+    };
   };
 
-  const handleShowLess = () => {
-    setShowAllCoins(false);
-    setDisplayLimit(100);
-    setMarketCoins(allCoins.slice(0, 100));
+  // Get result type badge
+  const getResultTypeBadge = (resultType) => {
+    if (resultType === "profit") {
+      return {
+        bg: `${COLORS.green}20`,
+        color: COLORS.green,
+        label: "Profit",
+      };
+    } else if (resultType === "loss") {
+      return {
+        bg: `${COLORS.red}20`,
+        color: COLORS.red,
+        label: "Loss",
+      };
+    }
+    return {
+      bg: "rgba(255,255,255,0.05)",
+      color: COLORS.text,
+      label: "—",
+    };
   };
 
   return (
@@ -471,7 +526,7 @@ export default function Markets() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by name or symbol..."
+              placeholder="Search by name, symbol, email..."
               className="w-full pl-12 pr-4 py-3 rounded-xl text-sm"
               style={{
                 backgroundColor: "rgba(255,255,255,0.05)",
@@ -512,9 +567,23 @@ export default function Markets() {
           >
             Admin Coins ({adminCoins.length})
           </button>
+          <button
+            onClick={() => setSearchType("manual")}
+            className={`px-4 py-2 font-medium transition-colors ${
+              searchType === "manual"
+                ? "border-b-2"
+                : "opacity-60 hover:opacity-100"
+            }`}
+            style={{
+              borderColor: searchType === "manual" ? COLORS.gold : "transparent",
+              color: COLORS.text,
+            }}
+          >
+            Manual Trade ({trades.length})
+          </button>
         </div>
 
-        {/* Market Coins Section */}
+        {/* Market Coins Section - Shows ALL coins, no pagination */}
         {searchType === "all" && (
           <div className="mb-8">
             <div className="flex justify-between items-center mb-4">
@@ -524,45 +593,6 @@ export default function Markets() {
               >
                 Live Market Data (Binance)
               </h2>
-              {!showAllCoins && totalCoins > displayLimit && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={handleShowMore}
-                    className="px-3 py-1 rounded-lg text-sm"
-                    style={{
-                      backgroundColor: "rgba(255,255,255,0.05)",
-                      color: COLORS.blue,
-                      border: `1px solid ${COLORS.border}`,
-                    }}
-                  >
-                    Show More (+100)
-                  </button>
-                  <button
-                    onClick={handleShowAll}
-                    className="px-3 py-1 rounded-lg text-sm"
-                    style={{
-                      backgroundColor: "rgba(255,255,255,0.05)",
-                      color: COLORS.gold,
-                      border: `1px solid ${COLORS.border}`,
-                    }}
-                  >
-                    Show All ({totalCoins})
-                  </button>
-                </div>
-              )}
-              {showAllCoins && (
-                <button
-                  onClick={handleShowLess}
-                  className="px-3 py-1 rounded-lg text-sm"
-                  style={{
-                    backgroundColor: "rgba(255,255,255,0.05)",
-                    color: COLORS.orange,
-                    border: `1px solid ${COLORS.border}`,
-                  }}
-                >
-                  Show Less (Top 100)
-                </button>
-              )}
             </div>
 
             <div
@@ -658,7 +688,7 @@ export default function Markets() {
                             >
                               {index + 1}
                             </span>
-                          </td>
+                           </td>
                           <td className="py-4 px-6">
                             <div>
                               <div
@@ -674,7 +704,7 @@ export default function Markets() {
                                 {coin.name}
                               </div>
                             </div>
-                          </td>
+                           </td>
                           <td className="py-4 px-6">
                             <div
                               className="font-medium"
@@ -682,7 +712,7 @@ export default function Markets() {
                             >
                               ${coin.price}
                             </div>
-                          </td>
+                           </td>
                           <td className="py-4 px-6">
                             <span
                               className="px-2 py-1 rounded-lg text-xs font-medium"
@@ -697,12 +727,12 @@ export default function Markets() {
                             >
                               {coin.change}
                             </span>
-                          </td>
+                           </td>
                           <td className="py-4 px-6">
                             <span style={{ color: COLORS.text }}>
                               ${coin.volume}
                             </span>
-                          </td>
+                           </td>
                           <td className="py-4 px-6">
                             {editingCustom === coin.symbol ? (
                               <div className="flex items-center gap-2">
@@ -761,7 +791,7 @@ export default function Markets() {
                                 </span>
                               </div>
                             )}
-                          </td>
+                           </td>
                           <td className="py-4 px-6">
                             <div className="flex items-center gap-1">
                               <button
@@ -794,7 +824,7 @@ export default function Markets() {
                                 <Edit size={16} />
                               </button>
                             </div>
-                          </td>
+                           </td>
                         </tr>
                       ))
                     ) : (
@@ -806,7 +836,7 @@ export default function Markets() {
                           >
                             No coins found matching "{searchQuery}"
                           </p>
-                        </td>
+                         </td>
                       </tr>
                     )}
                   </tbody>
@@ -1133,6 +1163,291 @@ export default function Markets() {
                               <Plus size={16} />
                               Add Your First Coin
                             </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Manual Trade Section */}
+        {searchType === "manual" && (
+          <div className="mt-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+              <div>
+                <h2
+                  className="text-xl font-semibold"
+                  style={{ color: COLORS.text }}
+                >
+                  Manual Trade History
+                </h2>
+                <p
+                  className="text-xs mt-1"
+                  style={{ color: COLORS.text, opacity: 0.7 }}
+                >
+                  All user trades from the trading system
+                </p>
+              </div>
+              <button
+                onClick={fetchTrades}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors flex items-center gap-2"
+                style={{
+                  color: COLORS.text,
+                  border: `1px solid ${COLORS.border}`,
+                }}
+                disabled={tradesLoading}
+              >
+                <RefreshCw size={16} className={tradesLoading ? "animate-spin" : ""} />
+                <span className="text-sm">Refresh</span>
+              </button>
+            </div>
+
+            <div
+              className="rounded-2xl overflow-hidden"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr
+                      style={{
+                        backgroundColor: "rgba(255,255,255,0.02)",
+                        borderBottom: `1px solid ${COLORS.border}`,
+                      }}
+                    >
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        ID
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        User
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Email
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Coin
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Type
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Price
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Quantity
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Total
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Status
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Result
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Created_At
+                      </th>
+                      <th
+                        className="text-left py-4 px-6 text-sm font-medium"
+                        style={{ color: COLORS.text }}
+                      >
+                        Closed_At
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {tradesLoading ? (
+                      <tr>
+                        <td colSpan="12" className="py-8 text-center">
+                          <div className="flex justify-center">
+                            <RefreshCw
+                              size={24}
+                              className="animate-spin"
+                              style={{ color: COLORS.text, opacity: 0.5 }}
+                            />
+                          </div>
+                          <p
+                            className="mt-2 text-sm"
+                            style={{ color: COLORS.text, opacity: 0.7 }}
+                          >
+                            Loading trade history...
+                          </p>
+                        </td>
+                      </tr>
+                    ) : filteredTrades.length > 0 ? (
+                      filteredTrades.map((trade) => {
+                        const statusBadge = getStatusBadge(trade.status);
+                        const resultBadge = getResultTypeBadge(trade.result_type);
+                        return (
+                          <tr
+                            key={trade.id}
+                            style={{ borderBottom: `1px solid ${COLORS.border}` }}
+                            className="hover:bg-white/5 transition-colors"
+                          >
+                            <td className="py-4 px-6">
+                              <span
+                                className="text-sm"
+                                style={{ color: COLORS.text, opacity: 0.6 }}
+                              >
+                                {trade.id}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <div>
+                                <div
+                                  className="font-medium"
+                                  style={{ color: COLORS.text }}
+                                >
+                                  {trade.name || "—"}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="text-sm"
+                                style={{ color: COLORS.text, opacity: 0.8 }}
+                              >
+                                {trade.email || "—"}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="font-medium"
+                                style={{ color: COLORS.blue }}
+                              >
+                                {trade.coin || "—"}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="px-2 py-1 rounded-lg text-xs font-medium"
+                                style={{
+                                  backgroundColor:
+                                    trade.trade_type === "buy"
+                                      ? `${COLORS.green}20`
+                                      : `${COLORS.red}20`,
+                                  color:
+                                    trade.trade_type === "buy"
+                                      ? COLORS.green
+                                      : COLORS.red,
+                                }}
+                              >
+                                {trade.trade_type?.toUpperCase() || "—"}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span style={{ color: COLORS.text }}>
+                                ${parseFloat(trade.price || 0).toFixed(6)}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span style={{ color: COLORS.text }}>
+                                {parseFloat(trade.quantity || 0).toFixed(6)}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span style={{ color: COLORS.gold }}>
+                                ${parseFloat(trade.total || 0).toFixed(6)}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="px-2 py-1 rounded-lg text-xs font-medium"
+                                style={{
+                                  backgroundColor: statusBadge.bg,
+                                  color: statusBadge.color,
+                                }}
+                              >
+                                {statusBadge.label}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="px-2 py-1 rounded-lg text-xs font-medium"
+                                style={{
+                                  backgroundColor: resultBadge.bg,
+                                  color: resultBadge.color,
+                                }}
+                              >
+                                {resultBadge.label}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="text-xs"
+                                style={{ color: COLORS.text, opacity: 0.7 }}
+                              >
+                                {formatDate(trade.created_at)}
+                              </span>
+                            </td>
+                            <td className="py-4 px-6">
+                              <span
+                                className="text-xs"
+                                style={{ color: COLORS.text, opacity: 0.7 }}
+                              >
+                                {formatDate(trade.closed_at)}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="12" className="py-8 text-center">
+                          <div className="flex flex-col items-center">
+                            <DollarSign
+                              size={40}
+                              style={{ color: COLORS.text, opacity: 0.3 }}
+                            />
+                            <p
+                              className="mt-2 text-sm"
+                              style={{ color: COLORS.text, opacity: 0.7 }}
+                            >
+                              {searchQuery
+                                ? `No trades found matching "${searchQuery}"`
+                                : "No trade history available"}
+                            </p>
                           </div>
                         </td>
                       </tr>

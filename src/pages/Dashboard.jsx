@@ -10,7 +10,7 @@ import {
   RefreshCw,
   BarChart3,
   Activity,
-  Video,
+  Video, 
   CreditCard,
   Award,
   AlertCircle,
@@ -86,7 +86,7 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("Status check failed", err);
-    }
+    } 
   };
  
   const handleCommission = async () => {
