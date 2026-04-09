@@ -37,7 +37,7 @@ const COLORS = {
 export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  
+  const [maintenance, setMaintenance] = useState(false);
   // Commission states
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [commissionLocked, setCommissionLocked] = useState(false);
@@ -50,7 +50,37 @@ export default function Dashboard() {
     online: 0,
     blocked: 0
   });
+
+  const fetchMaintenance = async () => {
+  try {
+    const res = await fetch(`${API}/system/maintenance`);
+    const data = await res.json();
+    setMaintenance(data.maintenance);
+  } catch (err) {
+    console.error(err);
+  }
+};
+
+useEffect(() => {
+  fetchMaintenance();
+}, []);
   
+const toggleMaintenance = async () => {
+  try {
+    const res = await fetch(`${API}/system/maintenance/toggle`, {
+      method: "POST",
+    });
+
+
+    const data = await res.json();
+
+    if (data.success) {
+      setMaintenance(data.maintenance);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+};
   const [walletStats, setWalletStats] = useState({
     totalMainWallet: 0,
     totalTradingWallet: 0,
@@ -414,6 +444,19 @@ export default function Dashboard() {
             )}
           </div>
         </div>
+
+        <div className="mb-6">
+  <button
+    onClick={toggleMaintenance}
+    className="px-6 py-3 rounded-lg font-semibold cursor-pointer"
+    style={{
+      backgroundColor: maintenance ? COLORS.red : COLORS.green,
+      color: "#fff",
+    }}
+  >
+    {maintenance ? "Disable Maintenance ❌" : "Enable Maintenance 🚧"}
+  </button>
+</div>
 
         {/* Settings Summary */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
