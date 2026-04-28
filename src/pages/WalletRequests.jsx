@@ -137,6 +137,19 @@ export default function WalletRequests() {
     }, 1500);
   };
 
+  const openImagePreview = async (request) => {
+  const res = await axios.get(
+    `${API_BASE_URL}/payments/${request.id}/screenshot`
+  );
+
+  setPreviewImage({
+    ...request,
+    screenshot: res.data.screenshot,
+  });
+
+  setShowImageModal(true);
+};
+
   const handleReject = async (requestId) => {
     if (!rejectReason.trim()) {
       alert("Please provide a reason");
@@ -1094,7 +1107,7 @@ export default function WalletRequests() {
           }}
         >
           <Copy size={16} />
-          {copied ? "Copied" : "Copy"}
+          {copied ? "Copied" : "Copy"} 
         </button>
 
         <button
