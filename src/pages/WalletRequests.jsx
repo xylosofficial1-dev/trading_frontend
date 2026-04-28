@@ -93,16 +93,6 @@ export default function WalletRequests() {
     }
   };
 
-  const openImagePreview = (request) => {
-    if (!request.screenshot) {
-      alert("No screenshot available");
-      return;
-    }
-
-    setPreviewImage(request);
-    setShowImageModal(true);
-  };
-
   const handleApprove = async (requestId) => {
     if (!window.confirm("Are you sure you want to approve this payment?"))
       return;
