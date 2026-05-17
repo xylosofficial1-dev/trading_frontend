@@ -110,10 +110,13 @@ const toggleMaintenance = async () => {
       const res = await fetch(`${API}/system/commission-status`);
       const data = await res.json();
 
-      if (data.locked) {
-        setCommissionLocked(true);
-        setCommissionMessage(`Available after ${data.remaining} hour(s)`);
-      }
+     if (data.locked) {
+  setCommissionLocked(true);
+  setCommissionMessage(`Available after ${data.remaining} hour(s)`);
+} else {
+  setCommissionLocked(false);
+  setCommissionMessage("");
+}
     } catch (err) {
       console.error("Status check failed", err);
     } 
@@ -136,7 +139,8 @@ const toggleMaintenance = async () => {
         );
 
         setCommissionLocked(true);
-        setCommissionMessage("Available after 24 hours");
+        // setCommissionMessage("Available after 24 hours");
+        setCommissionMessage("Available after 16 hours");
       } else {
         if (res.status === 400) {
           setCommissionLocked(true);

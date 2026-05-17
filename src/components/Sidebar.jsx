@@ -105,6 +105,11 @@ export default function Sidebar({ open }) {
             label="User Management"
           />
           <SidebarLink
+  to="/kyc-submit"
+  icon={<Shield size={18} />}
+  label="KYC Submit"
+/>
+          <SidebarLink
             to="/notifications"
             icon={<Bell size={18} />}
             label="Notifications"
@@ -152,6 +157,11 @@ export default function Sidebar({ open }) {
             icon={<Shield size={18} />}
             label="Task & Salary History"
           />
+          <SidebarLink
+  to="/daily-commission"
+  icon={<Wallet size={18} />}
+  label="Daily Commission"
+/>
 
           <SidebarLink
   to="/withdrawal-request"

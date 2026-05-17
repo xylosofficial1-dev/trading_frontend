@@ -14,6 +14,8 @@ import P2PAdmin from "../pages/P2p";
 import SwapHistory from "../pages/SwapHistory";
 import TaskSalaryHistory from "../pages/TaskSalaryHistory";
 import WithdrawalRequest from "../pages/WithdrawalRequest";
+import KYCSubmit from "../pages/KYCSubmit";
+import DailyCommission from "../pages/DailyCommission";
 
 export default function AppRoutes() {
   return (
@@ -41,6 +43,8 @@ export default function AppRoutes() {
 <Route path="/swap-history" element={<SwapHistory />} />
 <Route path="/task-salary-history" element={<TaskSalaryHistory />} />
 <Route path="/withdrawal-request" element={<WithdrawalRequest />} />
+<Route path="/kyc-submit" element={<KYCSubmit />} />
+<Route path="/daily-commission" element={<DailyCommission />} />
         </Route>
       </Routes>
     </BrowserRouter>
