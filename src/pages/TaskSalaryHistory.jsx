@@ -1,3 +1,4 @@
+// src/pages/TaskSalaryHistory.jsx
 import React, { useEffect, useState } from "react";
 import {
   Clock,
@@ -13,7 +14,8 @@ import {
   Gift,
   Briefcase,
   ChevronDown,
-  AlertCircle
+  AlertCircle,
+  TrendingDown
 } from "lucide-react";
 
 const API = import.meta.env.VITE_API_URL + "/api";
@@ -70,9 +72,12 @@ const formatDate = (dateString) => {
 
 export default function TaskSalaryHistory() {
   const [data, setData] = useState({ monthlySalary: [], referralRewards: [] });
+  const [updatedMonthlySalary, setUpdatedMonthlySalary] = useState([]);
   const [filteredSalary, setFilteredSalary] = useState([]);
   const [filteredRewards, setFilteredRewards] = useState([]);
+  const [filteredUpdatedSalary, setFilteredUpdatedSalary] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingUpdated, setLoadingUpdated] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("all");
   const [lastUpdated, setLastUpdated] = useState(new Date());
@@ -83,6 +88,11 @@ export default function TaskSalaryHistory() {
     avgSalary: 0,
     avgReward: 0,
     totalTransactions: 0,
+  });
+  const [updatedStats, setUpdatedStats] = useState({
+    totalSalary: 0,
+    avgSalary: 0,
+    uniqueUsers: 0,
   });
 
   const fetchData = async () => {
@@ -128,9 +138,46 @@ export default function TaskSalaryHistory() {
     }
   };
 
+  const fetchUpdatedMonthlySalary = async () => {
+    try {
+      setLoadingUpdated(true);
+      const res = await fetch(`${API}/monthly-salary/all-status`);
+      const result = await res.json();
+      
+      if (result.success) {
+        setUpdatedMonthlySalary(result.data);
+        setFilteredUpdatedSalary(result.data);
+        
+        // Calculate stats for updated monthly salary
+        const totalSalary = result.data.reduce((sum, item) => 
+          sum + Number(item.current_salary), 0
+        );
+        
+        const uniqueUsersSet = new Set(result.data.map(item => item.user_id));
+        
+        setUpdatedStats({
+          totalSalary: totalSalary,
+          avgSalary: result.data.length > 0 ? totalSalary / result.data.length : 0,
+          uniqueUsers: uniqueUsersSet.size,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch updated monthly salary:", err);
+    } finally {
+      setLoadingUpdated(false);
+    }
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Fetch updated monthly salary when tab is changed to updated-salary
+  useEffect(() => {
+    if (activeTab === "updated-salary" && updatedMonthlySalary.length === 0) {
+      fetchUpdatedMonthlySalary();
+    }
+  }, [activeTab]);
 
   // Filter data based on search
   useEffect(() => {
@@ -153,11 +200,22 @@ export default function TaskSalaryHistory() {
         item.id.toString().includes(query)
       );
       setFilteredRewards(filteredRew);
+
+      // Filter updated salary
+      const filteredUpdated = updatedMonthlySalary.filter(item =>
+        item.user_id.toString().includes(query) ||
+        item.name?.toLowerCase().includes(query) ||
+        item.phone?.includes(query) ||
+        item.current_business_level.toString().includes(query) ||
+        item.current_salary.toString().includes(query)
+      );
+      setFilteredUpdatedSalary(filteredUpdated);
     } else {
       setFilteredSalary(data.monthlySalary);
       setFilteredRewards(data.referralRewards);
+      setFilteredUpdatedSalary(updatedMonthlySalary);
     }
-  }, [searchQuery, data]);
+  }, [searchQuery, data, updatedMonthlySalary]);
 
   const getDisplayData = () => {
     switch(activeTab) {
@@ -165,6 +223,8 @@ export default function TaskSalaryHistory() {
         return { type: "salary", data: filteredSalary };
       case "rewards":
         return { type: "rewards", data: filteredRewards };
+      case "updated-salary":
+        return { type: "updated-salary", data: filteredUpdatedSalary };
       default:
         return { 
           type: "all", 
@@ -217,7 +277,13 @@ export default function TaskSalaryHistory() {
 
             {/* Refresh Button */}
             <button
-              onClick={fetchData}
+              onClick={() => {
+                if (activeTab === "updated-salary") {
+                  fetchUpdatedMonthlySalary();
+                } else {
+                  fetchData();
+                }
+              }}
               className="p-2 rounded-lg transition-colors"
               style={{
                 backgroundColor: COLORS.cardLight,
@@ -225,97 +291,167 @@ export default function TaskSalaryHistory() {
                 color: COLORS.text,
               }}
             >
-              <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
+              <RefreshCw size={20} className={(loading || loadingUpdated) ? "animate-spin" : ""} />
             </button>
           </div>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div
-            className="p-4 rounded-xl"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
-                Total Salary Paid
+        {activeTab !== "updated-salary" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Total Salary Paid
+                </p>
+                <Briefcase size={18} style={{ color: COLORS.gold }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.gold }}>
+                ${formatNumber(stats.totalSalaryPaid)}
               </p>
-              <Briefcase size={18} style={{ color: COLORS.gold }} />
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                {data.monthlySalary.length} transactions
+              </p>
             </div>
-            <p className="text-2xl font-bold" style={{ color: COLORS.gold }}>
-              ${formatNumber(stats.totalSalaryPaid)}
-            </p>
-            <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
-              {data.monthlySalary.length} transactions
-            </p>
-          </div>
 
-          <div
-            className="p-4 rounded-xl"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
-                Total Rewards Paid
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Total Rewards Paid
+                </p>
+                <Gift size={18} style={{ color: COLORS.purple }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.purple }}>
+                ${formatNumber(stats.totalRewardsPaid)}
               </p>
-              <Gift size={18} style={{ color: COLORS.purple }} />
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                {data.referralRewards.length} transactions
+              </p>
             </div>
-            <p className="text-2xl font-bold" style={{ color: COLORS.purple }}>
-              ${formatNumber(stats.totalRewardsPaid)}
-            </p>
-            <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
-              {data.referralRewards.length} transactions
-            </p>
-          </div>
 
-          <div
-            className="p-4 rounded-xl"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
-                Unique Users
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Unique Users
+                </p>
+                <Users size={18} style={{ color: COLORS.blue }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.blue }}>
+                {stats.uniqueUsers}
               </p>
-              <Users size={18} style={{ color: COLORS.blue }} />
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                Total recipients
+              </p>
             </div>
-            <p className="text-2xl font-bold" style={{ color: COLORS.blue }}>
-              {stats.uniqueUsers}
-            </p>
-            <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
-              Total recipients
-            </p>
-          </div>
 
-          <div
-            className="p-4 rounded-xl"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
-                Total Payout
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Total Payout
+                </p>
+                <DollarSign size={18} style={{ color: COLORS.positive }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.positive }}>
+                ${formatNumber(stats.totalSalaryPaid + stats.totalRewardsPaid)}
               </p>
-              <DollarSign size={18} style={{ color: COLORS.positive }} />
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                Combined amount
+              </p>
             </div>
-            <p className="text-2xl font-bold" style={{ color: COLORS.positive }}>
-              ${formatNumber(stats.totalSalaryPaid + stats.totalRewardsPaid)}
-            </p>
-            <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
-              Combined amount
-            </p>
           </div>
-        </div>
+        )}
+
+        {/* Updated Monthly Salary Stats */}
+        {activeTab === "updated-salary" && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Total Current Salary
+                </p>
+                <DollarSign size={18} style={{ color: COLORS.gold }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.gold }}>
+                ${formatNumber(updatedStats.totalSalary)}
+              </p>
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                Across all users
+              </p>
+            </div>
+
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Average Monthly Salary
+                </p>
+                <TrendingUp size={18} style={{ color: COLORS.purple }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.purple }}>
+                ${formatNumber(updatedStats.avgSalary)}
+              </p>
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                Per user
+              </p>
+            </div>
+
+            <div
+              className="p-4 rounded-xl"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.textMuted }}>
+                  Active Users
+                </p>
+                <Users size={18} style={{ color: COLORS.blue }} />
+              </div>
+              <p className="text-2xl font-bold" style={{ color: COLORS.blue }}>
+                {updatedStats.uniqueUsers}
+              </p>
+              <p className="text-xs mt-1" style={{ color: COLORS.textMuted }}>
+                With salary data
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Search and Tabs */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -330,7 +466,11 @@ export default function TaskSalaryHistory() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by user ID, transaction ID, or business level..."
+              placeholder={
+                activeTab === "updated-salary" 
+                  ? "Search by name, phone, user ID, business level, or salary..."
+                  : "Search by user ID, transaction ID, or business level..."
+              }
               className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm"
               style={{
                 backgroundColor: COLORS.card,
@@ -346,6 +486,7 @@ export default function TaskSalaryHistory() {
               { id: "all", label: "All", icon: null },
               { id: "salary", label: "Salary", icon: Briefcase },
               { id: "rewards", label: "Rewards", icon: Gift },
+              { id: "updated-salary", label: "Updated Salary", icon: TrendingUp },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -593,30 +734,191 @@ export default function TaskSalaryHistory() {
               </div>
             </div>
           )}
+
+          {/* Updated Monthly Salary Table - Show if activeTab is 'updated-salary' */}
+          {activeTab === "updated-salary" && (
+            <div
+              className="rounded-xl overflow-hidden"
+              style={{
+                backgroundColor: COLORS.card,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              <div className="p-4 border-b" style={{ borderColor: COLORS.border }}>
+                <div className="flex items-center gap-2">
+                  <TrendingUp size={18} style={{ color: COLORS.gold }} />
+                  <h2 className="font-semibold" style={{ color: COLORS.text }}>Updated Monthly Salary Status</h2>
+                  <span
+                    className="px-2 py-0.5 rounded-full text-xs ml-auto"
+                    style={{
+                      backgroundColor: COLORS.goldLight,
+                      color: COLORS.gold,
+                    }}
+                  >
+                    {filteredUpdatedSalary.length} users
+                  </span>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${COLORS.border}`, backgroundColor: "rgba(0,0,0,0.3)" }}>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>User ID</th>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>Name</th>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>Phone</th>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>Business Level</th>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>Current Salary</th>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>Level Started</th>
+                      <th className="p-3 text-left" style={{ color: COLORS.textMuted }}>Next Claim Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadingUpdated && (
+                      <tr>
+                        <td colSpan="7" className="p-8 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <RefreshCw size={24} className="animate-spin" style={{ color: COLORS.textMuted }} />
+                            <p style={{ color: COLORS.textMuted }}>Loading updated salary data...</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {!loadingUpdated && filteredUpdatedSalary.length === 0 && (
+                      <tr>
+                        <td colSpan="7" className="p-8 text-center">
+                          <div className="flex flex-col items-center gap-3">
+                            <AlertCircle size={24} style={{ color: COLORS.textMuted }} />
+                            <p style={{ color: COLORS.textMuted }}>No salary data found</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+
+                    {filteredUpdatedSalary.map((item, index) => {
+                      const nextClaimDate = new Date(item.next_claim_at);
+                      const now = new Date();
+                      const isOverdue = nextClaimDate < now;
+                      
+                      return (
+                        <tr
+                          key={`updated-${item.user_id}`}
+                          style={{
+                            borderBottom: index < filteredUpdatedSalary.length - 1 ? `1px solid ${COLORS.border}` : "none",
+                          }}
+                          className="hover:bg-white/5 transition-colors"
+                        >
+                          <td className="p-3">
+                            <span
+                              className="px-2 py-1 rounded-lg text-xs font-mono"
+                              style={{
+                                backgroundColor: COLORS.blueLight,
+                                color: COLORS.blue,
+                              }}
+                            >
+                              U-{item.user_id}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-medium" style={{ color: COLORS.text }}>
+                              {item.name}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="text-xs" style={{ color: COLORS.textMuted }}>
+                              {item.phone}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span
+                              className="px-2 py-1 rounded-lg text-xs"
+                              style={{
+                                backgroundColor: COLORS.purpleLight,
+                                color: COLORS.purple,
+                              }}
+                            >
+                              ${formatNumber(item.current_business_level)}
+                            </span>
+                          </td>
+                          <td className="p-3">
+                            <span className="font-bold" style={{ color: COLORS.gold }}>
+                              ${formatNumber(item.current_salary)}
+                            </span>
+                          </td>
+                          <td className="p-3 text-xs" style={{ color: COLORS.textMuted }}>
+                            <div className="flex items-center gap-2">
+                              <Calendar size={12} />
+                              {formatDate(item.level_started_at)}
+                            </div>
+                          </td>
+                          <td className="p-3 text-xs">
+                            <div className="flex items-center gap-2">
+                              <Clock size={12} />
+                              <span style={{ color: isOverdue ? COLORS.negative : COLORS.textMuted }}>
+                                {formatDate(item.next_claim_at)}
+                                {isOverdue && (
+                                  <span className="ml-2 px-1 py-0.5 rounded text-xs" style={{ backgroundColor: COLORS.negativeLight, color: COLORS.negative }}>
+                                    Overdue
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Footer with Summary */}
-        <div
-          className="mt-6 px-4 py-3 rounded-lg text-sm flex flex-wrap justify-between items-center gap-2"
-          style={{
-            backgroundColor: COLORS.card,
-            border: `1px solid ${COLORS.border}`,
-            color: COLORS.textMuted,
-          }}
-        >
-          <span>
-            Showing {activeTab === "all" 
-              ? `${filteredSalary.length + filteredRewards.length} of ${data.monthlySalary.length + data.referralRewards.length} total transactions`
-              : activeTab === "salary"
-              ? `${filteredSalary.length} of ${data.monthlySalary.length} salary claims`
-              : `${filteredRewards.length} of ${data.referralRewards.length} referral rewards`
-            }
-          </span>
-          <div className="flex gap-4">
-            <span>💰 Salary: ${formatNumber(stats.totalSalaryPaid)}</span>
-            <span>🎁 Rewards: ${formatNumber(stats.totalRewardsPaid)}</span>
+        {activeTab !== "updated-salary" && (
+          <div
+            className="mt-6 px-4 py-3 rounded-lg text-sm flex flex-wrap justify-between items-center gap-2"
+            style={{
+              backgroundColor: COLORS.card,
+              border: `1px solid ${COLORS.border}`,
+              color: COLORS.textMuted,
+            }}
+          >
+            <span>
+              Showing {activeTab === "all" 
+                ? `${filteredSalary.length + filteredRewards.length} of ${data.monthlySalary.length + data.referralRewards.length} total transactions`
+                : activeTab === "salary"
+                ? `${filteredSalary.length} of ${data.monthlySalary.length} salary claims`
+                : `${filteredRewards.length} of ${data.referralRewards.length} referral rewards`
+              }
+            </span>
+            <div className="flex gap-4">
+              <span>💰 Salary: ${formatNumber(stats.totalSalaryPaid)}</span>
+              <span>🎁 Rewards: ${formatNumber(stats.totalRewardsPaid)}</span>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Footer for Updated Salary Tab */}
+        {activeTab === "updated-salary" && (
+          <div
+            className="mt-6 px-4 py-3 rounded-lg text-sm flex flex-wrap justify-between items-center gap-2"
+            style={{
+              backgroundColor: COLORS.card,
+              border: `1px solid ${COLORS.border}`,
+              color: COLORS.textMuted,
+            }}
+          >
+            <span>
+              Showing {filteredUpdatedSalary.length} of {updatedMonthlySalary.length} users with salary data
+            </span>
+            <div className="flex gap-4">
+              <span>💰 Total Monthly Salary: ${formatNumber(updatedStats.totalSalary)}</span>
+              <span>📊 Average: ${formatNumber(updatedStats.avgSalary)}</span>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
