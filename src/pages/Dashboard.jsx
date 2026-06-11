@@ -16,7 +16,10 @@ import {
   AlertCircle,
   Lock,
   Unlock,
-  Gift
+  Gift,
+  Shield,
+  Bell,
+  Calendar
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -38,10 +41,18 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [maintenance, setMaintenance] = useState(false);
+  const [subscriptionLocked, setSubscriptionLocked] = useState(false);
+const [subscriptionMessage, setSubscriptionMessage] = useState("");
   // Commission states
   const [commissionLoading, setCommissionLoading] = useState(false);
   const [commissionLocked, setCommissionLocked] = useState(false);
   const [commissionMessage, setCommissionMessage] = useState("");
+const [unlockTime, setUnlockTime] = useState(null);
+const [countdown, setCountdown] = useState("");
+  // Premium Subscription states
+  const [subscriptionProcessing, setSubscriptionProcessing] = useState(false);
+  const [subscriptionResult, setSubscriptionResult] = useState(null);
+  const [showSubscriptionModal, setShowSubscriptionModal] = useState(false);
   
   // Stats state
   const [userStats, setUserStats] = useState({
@@ -52,35 +63,83 @@ export default function Dashboard() {
   });
 
   const fetchMaintenance = async () => {
+    try {
+      const res = await fetch(`${API}/system/maintenance`);
+      const data = await res.json();
+      setMaintenance(data.maintenance);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchMaintenance();
+  }, []);
+  
+  const checkSubscriptionStatus = async () => {
   try {
-    const res = await fetch(`${API}/system/maintenance`);
+    const res = await fetch(
+      `${API}/premium/process-subscriptions-status`
+    );
+
     const data = await res.json();
-    setMaintenance(data.maintenance);
+
+    setSubscriptionLocked(data.locked);
+
+    if (data.locked) {
+      setUnlockTime(data.unlockTime);
+    } else {
+      setUnlockTime(null);
+      setCountdown("");
+    }
   } catch (err) {
     console.error(err);
   }
 };
 
 useEffect(() => {
-  fetchMaintenance();
-}, []);
-  
-const toggleMaintenance = async () => {
-  try {
-    const res = await fetch(`${API}/system/maintenance/toggle`, {
-      method: "POST",
-    });
+  if (!unlockTime) return;
 
+  const interval = setInterval(() => {
+    const diff = unlockTime - Date.now();
 
-    const data = await res.json();
-
-    if (data.success) {
-      setMaintenance(data.maintenance);
+    if (diff <= 0) {
+      setSubscriptionLocked(false);
+      setCountdown("");
+      clearInterval(interval);
+      return;
     }
-  } catch (err) {
-    console.error(err);
-  }
-};
+
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor(
+      (diff % (1000 * 60 * 60)) / (1000 * 60)
+    );
+    const seconds = Math.floor(
+      (diff % (1000 * 60)) / 1000
+    );
+
+    setCountdown(
+      `${hours}h ${minutes}m ${seconds}s`
+    );
+  }, 1000);
+
+  return () => clearInterval(interval);
+}, [unlockTime]);
+
+  const toggleMaintenance = async () => {
+    try {
+      const res = await fetch(`${API}/system/maintenance/toggle`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMaintenance(data.maintenance);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  
   const [walletStats, setWalletStats] = useState({
     totalMainWallet: 0,
     totalTradingWallet: 0,
@@ -100,23 +159,23 @@ const toggleMaintenance = async () => {
 
   const API = `${import.meta.env.VITE_API_URL}/api`;
 
-  useEffect(() => {
-    fetchAllDashboardData();
-    checkCommissionStatus();
-  }, []);
+ useEffect(() => {
+  fetchAllDashboardData();
+  checkCommissionStatus();
+  checkSubscriptionStatus();
+}, []);
 
   const checkCommissionStatus = async () => {
     try {
       const res = await fetch(`${API}/system/commission-status`);
       const data = await res.json();
-
-     if (data.locked) {
-  setCommissionLocked(true);
-  setCommissionMessage(`Available after ${data.remaining} hour(s)`);
-} else {
-  setCommissionLocked(false);
-  setCommissionMessage("");
-}
+      if (data.locked) {
+        setCommissionLocked(true);
+        setCommissionMessage(`Available after ${data.remaining} hour(s)`);
+      } else {
+        setCommissionLocked(false);
+        setCommissionMessage("");
+      }
     } catch (err) {
       console.error("Status check failed", err);
     } 
@@ -126,20 +185,15 @@ const toggleMaintenance = async () => {
     try {
       setCommissionLoading(true);
       setCommissionMessage("");
-
       const res = await fetch(`${API}/system/distribute-commission`, {
         method: "POST",
       });
-
       const data = await res.json();
-
       if (res.ok && data.success) {
         alert(
           `Commission Distributed Successfully!\nUsers Processed: ${data.users}`
         );
-
         setCommissionLocked(true);
-        // setCommissionMessage("Available after 24 hours");
         setCommissionMessage("Available after 16 hours");
       } else {
         if (res.status === 400) {
@@ -154,6 +208,40 @@ const toggleMaintenance = async () => {
       alert("Server error");
     } finally {
       setCommissionLoading(false);
+    }
+  };
+
+  // Process Premium Subscriptions
+  const handleProcessSubscriptions = async () => {
+    setSubscriptionProcessing(true);
+    setSubscriptionResult(null);
+    
+    try {
+      const res = await fetch(`${API}/premium/process-subscriptions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+  setSubscriptionResult(data);
+  setShowSubscriptionModal(true);
+
+  await fetchAllDashboardData();
+
+  // reload lock state from DB
+  await checkSubscriptionStatus();
+} else {
+        alert(`Failed: ${data.message}`);
+      }
+    } catch (err) {
+      console.error("Error processing subscriptions:", err);
+      alert("Failed to process subscriptions. Please try again.");
+    } finally {
+      setSubscriptionProcessing(false);
     }
   };
 
@@ -188,7 +276,6 @@ const toggleMaintenance = async () => {
       });
     } catch (err) {
       console.error("Failed to fetch user stats", err);
-      // Fallback to count from users table if endpoint doesn't exist
       try {
         const usersRes = await fetch(`${API}/admin/users`);
         const users = await usersRes.json();
@@ -274,11 +361,14 @@ const toggleMaintenance = async () => {
   };
 
   const handleRefresh = async () => {
-    setIsRefreshing(true);
-    await fetchAllDashboardData();
-    await checkCommissionStatus();
-    setIsRefreshing(false);
-  };
+  setIsRefreshing(true);
+
+  await fetchAllDashboardData();
+  await checkCommissionStatus();
+  await checkSubscriptionStatus();
+
+  setIsRefreshing(false);
+};
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-US', {
@@ -335,6 +425,129 @@ const toggleMaintenance = async () => {
     </div>
   );
 
+  // Result Modal Component
+  const ResultModal = () => {
+    if (!showSubscriptionModal || !subscriptionResult) return null;
+    
+    const { summary } = subscriptionResult;
+    
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4">
+        <div 
+          className="rounded-xl max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+          style={{
+            backgroundColor: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+          }}
+        >
+          <div className="sticky top-0 p-6 border-b" style={{ borderColor: COLORS.border }}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Shield size={28} style={{ color: COLORS.gold }} />
+                <h2 className="text-xl font-bold" style={{ color: COLORS.gold }}>
+                  Subscription Processing Results
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowSubscriptionModal(false)}
+                className="p-2 rounded-lg hover:bg-white/10 transition"
+              >
+                <XCircle size={24} style={{ color: COLORS.text }} />
+              </button>
+            </div>
+            <p className="text-sm mt-2" style={{ color: COLORS.text, opacity: 0.7 }}>
+              Processed at: {new Date(subscriptionResult.timestamp).toLocaleString()}
+            </p>
+          </div>
+          
+          <div className="p-6">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+              <div className="p-3 rounded-lg text-center" style={{ backgroundColor: "rgba(59,130,246,0.1)" }}>
+                <p className="text-xs opacity-70" style={{ color: COLORS.text }}>Total</p>
+                <p className="text-xl font-bold" style={{ color: COLORS.blue }}>{summary.total_processed}</p>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ backgroundColor: "rgba(16,185,129,0.1)" }}>
+                <p className="text-xs opacity-70" style={{ color: COLORS.text }}>Auto-Renewed</p>
+                <p className="text-xl font-bold" style={{ color: COLORS.green }}>{summary.auto_renewed}</p>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ backgroundColor: "rgba(239,68,68,0.1)" }}>
+                <p className="text-xs opacity-70" style={{ color: COLORS.text }}>Failed</p>
+                <p className="text-xl font-bold" style={{ color: COLORS.red }}>{summary.renewal_failed}</p>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ backgroundColor: "rgba(245,158,11,0.1)" }}>
+                <p className="text-xs opacity-70" style={{ color: COLORS.text }}>Expired</p>
+                <p className="text-xl font-bold" style={{ color: COLORS.orange }}>{summary.expired}</p>
+              </div>
+              <div className="p-3 rounded-lg text-center" style={{ backgroundColor: "rgba(139,92,246,0.1)" }}>
+                <p className="text-xs opacity-70" style={{ color: COLORS.text }}>Reminders</p>
+                <p className="text-xl font-bold" style={{ color: COLORS.purple }}>{summary.reminders_sent}</p>
+              </div>
+            </div>
+            
+            {/* Details Table */}
+            {subscriptionResult.details && subscriptionResult.details.length > 0 && (
+              <>
+                <h3 className="font-semibold mb-3" style={{ color: COLORS.text }}>Processing Details</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                        <th className="text-left py-2 px-3" style={{ color: COLORS.text }}>User ID</th>
+                        <th className="text-left py-2 px-3" style={{ color: COLORS.text }}>Action</th>
+                        <th className="text-left py-2 px-3" style={{ color: COLORS.text }}>Message</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscriptionResult.details.slice(0, 10).map((detail, idx) => (
+                        <tr key={idx} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+                          <td className="py-2 px-3" style={{ color: COLORS.text }}>{detail.user_id}</td>
+                          <td className="py-2 px-3">
+                            <span className="px-2 py-1 rounded text-xs" style={{
+                              backgroundColor: detail.action === 'auto_renewed' ? 'rgba(16,185,129,0.2)' :
+                                              detail.action === 'renewal_failed' ? 'rgba(239,68,68,0.2)' :
+                                              detail.action === 'expired' ? 'rgba(245,158,11,0.2)' :
+                                              'rgba(59,130,246,0.2)',
+                              color: detail.action === 'auto_renewed' ? COLORS.green :
+                                     detail.action === 'renewal_failed' ? COLORS.red :
+                                     detail.action === 'expired' ? COLORS.orange :
+                                     COLORS.blue
+                            }}>
+                              {detail.action}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-xs" style={{ color: COLORS.text, opacity: 0.7 }}>{detail.message}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {subscriptionResult.details.length > 10 && (
+                    <p className="text-xs text-center mt-2" style={{ color: COLORS.text, opacity: 0.5 }}>
+                      + {subscriptionResult.details.length - 10} more entries
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+          
+          <div className="sticky bottom-0 p-6 border-t" style={{ borderColor: COLORS.border }}>
+            <button
+              onClick={() => setShowSubscriptionModal(false)}
+              className="w-full py-2 rounded-lg font-medium transition hover:opacity-80"
+              style={{
+                backgroundColor: COLORS.gold,
+                color: "#000",
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) {
     return (
       <div className="p-4 md:p-6 min-h-screen flex items-center justify-center" style={{ backgroundColor: COLORS.bg }}>
@@ -374,6 +587,87 @@ const toggleMaintenance = async () => {
               <RefreshCw size={18} className={isRefreshing ? 'animate-spin' : ''} />
               <span className="text-sm font-medium">Refresh</span>
             </button>
+          </div>
+        </div>
+
+        {/* Premium Subscription Processing Card */}
+        <div
+          className="rounded-xl p-6 mb-6"
+          style={{
+            backgroundColor: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+            background: `linear-gradient(145deg, ${COLORS.card} 0%, rgba(0,0,0,0.8) 100%)`,
+          }}
+        >
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div
+                className="p-3 rounded-xl"
+                style={{
+                  backgroundColor: `${COLORS.gold}20`,
+                }}
+              >
+                <Shield size={24} style={{ color: COLORS.gold }} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold" style={{ color: COLORS.text }}>
+                  Premium Subscription Manager
+                </h2>
+                <p className="text-sm opacity-70" style={{ color: COLORS.text }}>
+                  Check expiring subscriptions, process auto-renewals, and send reminders
+                </p>
+                <div className="flex gap-4 mt-2">
+                  <span className="text-xs flex items-center gap-1" style={{ color: COLORS.orange }}>
+                    <Clock size={12} /> Checks expiry dates
+                  </span>
+                  <span className="text-xs flex items-center gap-1" style={{ color: COLORS.green }}>
+                    <CheckCircle size={12} /> Auto-renewal
+                  </span>
+                  <span className="text-xs flex items-center gap-1" style={{ color: COLORS.blue }}>
+                    <Bell size={12} /> Sends reminders
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleProcessSubscriptions}
+              disabled={subscriptionProcessing || subscriptionLocked}
+              className="px-6 py-3 rounded-lg font-medium flex items-center gap-2 whitespace-nowrap transition-all duration-200 hover:scale-[1.02]"
+              style={{
+                backgroundColor: COLORS.gold,
+                color: "#000000",
+                opacity:
+  subscriptionProcessing || subscriptionLocked
+    ? 0.7
+    : 1,
+              }}
+            >
+             {subscriptionLocked ? (
+  <>
+    <Lock size={18} />
+    {countdown || "Locked"}
+  </>
+) : subscriptionProcessing ? (
+  <>
+    <RefreshCw size={18} className="animate-spin" />
+    Processing...
+  </>
+) : (
+  <>
+    <Calendar size={18} />
+    Process Subscriptions
+  </>
+)}
+            </button>
+            {subscriptionLocked && (
+  <div
+    className="mt-2 text-sm"
+    style={{ color: COLORS.red }}
+  >
+    Next run available in {countdown}
+  </div>
+)}
           </div>
         </div>
 
@@ -450,17 +744,17 @@ const toggleMaintenance = async () => {
         </div>
 
         <div className="mb-6">
-  <button
-    onClick={toggleMaintenance}
-    className="px-6 py-3 rounded-lg font-semibold cursor-pointer"
-    style={{
-      backgroundColor: maintenance ? COLORS.red : COLORS.green,
-      color: "#fff",
-    }}
-  >
-    {maintenance ? "Disable Maintenance ❌" : "Enable Maintenance 🚧"}
-  </button>
-</div>
+          <button
+            onClick={toggleMaintenance}
+            className="px-6 py-3 rounded-lg font-semibold cursor-pointer"
+            style={{
+              backgroundColor: maintenance ? COLORS.red : COLORS.green,
+              color: "#fff",
+            }}
+          >
+            {maintenance ? "Disable Maintenance ❌" : "Enable Maintenance 🚧"}
+          </button>
+        </div>
 
         {/* Settings Summary */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -525,7 +819,7 @@ const toggleMaintenance = async () => {
             { label: "P2P", icon: BarChart3, color: COLORS.orange, path: "/p2p", count: p2pStats.pendingRequests },
             { label: "Videos", icon: Video, color: COLORS.pink, path: "/videos" },
             { label: "Markets", icon: Activity, color: COLORS.gold, path: "/markets" },
-            { label: "Notifications", icon: Activity, color: COLORS.red, path: "/notifications" },
+            { label: "Notifications", icon: Bell, color: COLORS.red, path: "/notifications" },
             { label: "Pay Options", icon: CreditCard, color: COLORS.blue, path: "/payoptions" },
           ].map((action, index) => (
             <Link
@@ -563,6 +857,9 @@ const toggleMaintenance = async () => {
           ))}
         </div>
       </div>
+      
+      {/* Result Modal */}
+      <ResultModal />
     </div>
   );
 }

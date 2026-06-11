@@ -16,6 +16,7 @@ import TaskSalaryHistory from "../pages/TaskSalaryHistory";
 import WithdrawalRequest from "../pages/WithdrawalRequest";
 import KYCSubmit from "../pages/KYCSubmit";
 import DailyCommission from "../pages/DailyCommission";
+import AdminPremium from "../pages/AdminPremium";
 
 export default function AppRoutes() {
   return (
@@ -45,6 +46,7 @@ export default function AppRoutes() {
 <Route path="/withdrawal-request" element={<WithdrawalRequest />} />
 <Route path="/kyc-submit" element={<KYCSubmit />} />
 <Route path="/daily-commission" element={<DailyCommission />} />
+<Route path="/premium" element={<AdminPremium />} />
         </Route>
       </Routes>
     </BrowserRouter>

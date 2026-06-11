@@ -11,7 +11,8 @@ import {
   Settings,
   Shield,
   Activity,
-  Repeat
+  Repeat,
+  Crown
 } from "lucide-react";
 
 // Color constants matching your Assets component
@@ -93,7 +94,7 @@ export default function Sidebar({ open }) {
           />
 
           {/* Management Section */}
-          <div className="px-4 mb-2 mt-6">
+          <div className="px-4 mb-2 mt-2">
             <p className="text-xs uppercase tracking-wider" style={{ color: COLORS.text, opacity: 0.5 }}>
               Management
             </p>
@@ -108,6 +109,11 @@ export default function Sidebar({ open }) {
   to="/kyc-submit"
   icon={<Shield size={18} />}
   label="KYC Submit"
+/>
+<SidebarLink
+  to="/premium"
+  icon={<Crown size={18} />}
+  label="Premium Manage"
 />
           <SidebarLink
             to="/notifications"

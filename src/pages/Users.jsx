@@ -21,6 +21,9 @@ import {
   X,
   ChevronDown,
   Filter,
+  DollarSign,
+  Percent,
+  BadgeCheck
 } from "lucide-react";
 
 // Color constants matching your theme
@@ -63,30 +66,110 @@ const [loadingTree, setLoadingTree] = useState(false);
   useEffect(() => {
     fetchUsers();
   }, []);
-
   const fetchUsers = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch(`${BASE_URL}/api/all`);
+  try {
+    setLoading(true);
+    // Change this line from '/api/all' to '/api/all-with-commission'
+    const response = await fetch(`${BASE_URL}/api/all-with-commission`);
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.success) {
-        setUsers(data.data);
-      } else {
-        throw new Error("Failed to fetch users");
-      }
-    } catch (err) {
-      setError(err.message);
-      console.error("Error fetching users:", err);
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
     }
-  };
+
+    const data = await response.json();
+
+    if (data.success) {
+      setUsers(data.data);
+    } else {
+      throw new Error("Failed to fetch users");
+    }
+  } catch (err) {
+    setError(err.message);
+    console.error("Error fetching users:", err);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  // const fetchUsers = async () => {
+  //   try {
+  //     setLoading(true);
+  //     const response = await fetch(`${BASE_URL}/api/all`);
+
+  //     if (!response.ok) {
+  //       throw new Error(`HTTP error! status: ${response.status}`);
+  //     }
+
+  //     const data = await response.json();
+
+  //     if (data.success) {
+  //       setUsers(data.data);
+  //     } else {
+  //       throw new Error("Failed to fetch users");
+  //     }
+  //   } catch (err) {
+  //     setError(err.message);
+  //     console.error("Error fetching users:", err);
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
+
+  // Add this function after confirmStatusChange function
+const toggleKycVerification = async (userId, currentKycStatus) => {
+  try {
+    const newStatus = !currentKycStatus;  // Toggle boolean (true/false)
+
+    const res = await fetch(`${BASE_URL}/api/users/${userId}/kyc-verify`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ kyc_verify: newStatus }),
+    });
+
+    const data = await res.json();
+    if (!data.success) throw new Error("Update failed");
+
+    setUsers((users) =>
+      users.map((u) => (u.id === userId ? { ...u, kyc_verify: newStatus } : u))
+    );
+    
+    alert(`KYC verification ${newStatus === 1 ? 'approved' : 'revoked'} successfully!`);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to update KYC verification status");
+  }
+};
+
+const toggleCommissionStatus = async (userId, currentStatus) => {
+  try {
+    const newStatus = !currentStatus;
+    
+    const response = await fetch(`${BASE_URL}/api/users/${userId}/commission`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ commission_enabled: newStatus }),
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      // Update local state
+      setUsers(users.map(user => 
+        user.id === userId 
+          ? { ...user, commission_enabled: newStatus }
+          : user
+      ));
+      
+      // Show success message
+      alert(`Commission ${newStatus ? 'enabled' : 'disabled'} for user`);
+    } else {
+      throw new Error("Failed to update");
+    }
+  } catch (err) {
+    console.error("Error toggling commission:", err);
+    alert("Failed to update commission status");
+  }
+};
 
   const toggleUserStatus = (userId, currentStatus) => {
     setShowStatusConfirm({ userId, currentStatus });
@@ -701,7 +784,7 @@ const TreeNode = ({ node, level = 0 }) => {
           >
             {/* Table Header */}
             <div
-              className="grid grid-cols-12 p-4"
+              className="grid grid-cols-14 p-4"
               style={{
                 borderBottom: `1px solid ${COLORS.border}`,
                 backgroundColor: "rgba(255,255,255,0.03)",
@@ -737,6 +820,15 @@ const TreeNode = ({ node, level = 0 }) => {
               >
                 Status
               </div>
+              <div
+                className="col-span-1 font-medium"
+                style={{ color: COLORS.text }}
+              >
+                KYC
+              </div>
+                <div className="col-span-1 font-medium" style={{ color: COLORS.text }}>
+    Commission
+  </div>
             </div>
 
             {/* Table Body */}
@@ -755,7 +847,7 @@ const TreeNode = ({ node, level = 0 }) => {
               currentUsers.map((user) => (
                 <div
                   key={user.id}
-                  className="grid grid-cols-12 p-4 hover:bg-white/5 transition-colors border-b"
+                  className="grid grid-cols-14 p-4 hover:bg-white/5 transition-colors border-b"
                   style={{ borderColor: COLORS.border }}
                 >
                   <div className="col-span-3 pl-3">
@@ -1100,26 +1192,61 @@ const TreeNode = ({ node, level = 0 }) => {
                     )}
                   </div>
 
-                  <div className="col-span-2 flex items-center gap-2">
-                    <button
-                      onClick={() => toggleUserStatus(user.id, user.status)}
-                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
-                        user.status === "ok"
-                          ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
-                          : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                      }`}
-                    >
-                      {user.status === "ok" ? (
-                        <>
-                          <Shield size={10} /> Active
-                        </>
-                      ) : (
-                        <>
-                          <ShieldOff size={10} /> Blocked
-                        </>
-                      )}
-                    </button>
-                  </div>
+               <div className="col-span-2 flex items-center gap-2">
+  <button
+    onClick={() => toggleUserStatus(user.id, user.status)}
+    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all flex items-center gap-1.5 ${
+      user.status === "ok"
+        ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
+        : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+    }`}
+  >
+    {user.status === "ok" ? (
+      <>
+        <Shield size={10} /> Active
+      </>
+    ) : (
+      <>
+        <ShieldOff size={10} /> Blocked
+      </>
+    )}
+  </button>
+</div>
+
+{/* KYC Column - col-span-1 */}
+<div className="col-span-1 flex items-center gap-2">
+  <button
+    onClick={() => toggleKycVerification(user.id, user.kyc_verify)}
+    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+      user.kyc_verify === true ? "bg-blue-500" : "bg-gray-600"
+    }`}
+  >
+    <span
+      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+        user.kyc_verify === true ? "translate-x-5" : "translate-x-0.5"
+      }`}
+    />
+  </button>
+</div>
+
+{/* Commission Column - col-span-1 */}
+<div className="col-span-1 flex items-center gap-2">
+  <button
+    onClick={() => toggleCommissionStatus(user.id, user.commission_enabled)}
+    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+      user.commission_enabled === true ? "bg-green-500" : "bg-gray-600"
+    }`}
+  >
+    <span
+      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+        user.commission_enabled === true ? "translate-x-5" : "translate-x-0.5"
+      }`}
+    />
+  </button>
+  <span className="text-xs font-medium" style={{ color: COLORS.text, opacity: 0.7 }}>
+    {user.commission_enabled === true ? "On" : "Off"}
+  </span>
+</div>
                 </div>
               ))
             )}
@@ -2014,7 +2141,7 @@ const TreeNode = ({ node, level = 0 }) => {
             <p className="text-sm" style={{ color: COLORS.text, opacity: 0.7 }}>
               {treeData.email}
             </p>
-            
+             
             {/* Parent Info */}
             <div className="mt-3 pt-3 border-t" style={{ borderColor: `${COLORS.gold}20` }}>
               <p className="text-xs mb-1" style={{ color: COLORS.gold, opacity: 0.7 }}>

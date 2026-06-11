@@ -24,7 +24,6 @@ export default function TradeWalletRequest() {
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const API_BASE = `${import.meta.env.VITE_API_URL}/api`;
-  // const API_BASE = "http://localhost:5000/api";
 
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(false);

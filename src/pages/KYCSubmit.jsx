@@ -15,6 +15,8 @@ import {
   Phone,
   Calendar,
   AlertTriangle,
+  Search,
+  Filter,
 } from "lucide-react";
 
 const COLORS = {
@@ -34,7 +36,14 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export default function KYCSubmit() {
   const [userSubmissions, setUserSubmissions] = useState([]);
+  const [filteredSubmissions, setFilteredSubmissions] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // Filter states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
   
   // State for View Documents Modal
   const [showViewModal, setShowViewModal] = useState(false);
@@ -52,37 +61,90 @@ export default function KYCSubmit() {
     loadKycSubmissions();
   }, []);
 
- const loadKycSubmissions = async () => {
-  try {
-    setLoading(true);
+  useEffect(() => {
+    applyFilters();
+  }, [searchTerm, statusFilter, fromDate, toDate, userSubmissions]);
 
-    const res = await fetch(`${API_BASE_URL}/api/kyc/admin/all`);
-
-    const text = await res.text();
-
-    let data;
-
+  const loadKycSubmissions = async () => {
     try {
-      data = JSON.parse(text);
-    } catch {
-      console.error("Invalid JSON:", text);
-      alert("Server returned invalid response");
-      return;
-    }
+      setLoading(true);
+      const res = await fetch(`${API_BASE_URL}/api/kyc/admin/all`);
+      const text = await res.text();
+      let data;
 
-    if (data.success) {
-      setUserSubmissions(data.data);
-    } else {
-      alert(data.error || "Failed to load KYC");
-    }
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error("Invalid JSON:", text);
+        alert("Server returned invalid response");
+        return;
+      }
 
-  } catch (err) {
-    console.error(err);
-    alert("Network Error");
-  } finally {
-    setLoading(false);
+      if (data.success) {
+        setUserSubmissions(data.data);
+        setFilteredSubmissions(data.data);
+      } else {
+        alert(data.error || "Failed to load KYC");
+      }
+    } catch (err) {
+      console.error(err);
+      alert("Network Error");
+    } finally {
+      setLoading(false);
+    }
+  };
+   
+
+  const applyFilters = () => {
+  let filtered = [...userSubmissions];
+
+  // Search filter (by name, email, or user ID)
+  if (searchTerm) {
+    const term = searchTerm.toLowerCase();
+    filtered = filtered.filter((sub) => {
+      const userName = sub.userName ? String(sub.userName).toLowerCase() : "";
+      const userEmail = sub.userEmail ? String(sub.userEmail).toLowerCase() : "";
+      const userId = sub.userId ? String(sub.userId).toLowerCase() : "";
+      
+      return userName.includes(term) || 
+             userEmail.includes(term) || 
+             userId.includes(term);
+    });
   }
+
+  // Status filter
+  if (statusFilter !== "all") {
+    filtered = filtered.filter((sub) => sub.status === statusFilter);
+  }
+
+  // Date range filter
+  if (fromDate) {
+    const fromDateTime = new Date(fromDate).setHours(0, 0, 0, 0);
+    filtered = filtered.filter((sub) => {
+      if (!sub.submittedAt) return false;
+      const subDate = new Date(sub.submittedAt).setHours(0, 0, 0, 0);
+      return subDate >= fromDateTime;
+    });
+  }
+
+  if (toDate) {
+    const toDateTime = new Date(toDate).setHours(23, 59, 59, 999);
+    filtered = filtered.filter((sub) => {
+      if (!sub.submittedAt) return false;
+      const subDate = new Date(sub.submittedAt);
+      return subDate <= toDateTime;
+    });
+  }
+
+  setFilteredSubmissions(filtered);
 };
+
+  const clearFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setFromDate("");
+    setToDate("");
+  };
 
   const handleApprove = async (submission) => {
     try {
@@ -147,9 +209,7 @@ export default function KYCSubmit() {
     setShowViewModal(true);
     setLoadingImages(true);
     
-    // Fetch images
     try {
-      // Fetch government ID image
       const govRes = await fetch(`${API_BASE_URL}/api/kyc/gov-image/${submission.userId}`);
       if (govRes.ok) {
         const govBlob = await govRes.blob();
@@ -159,7 +219,6 @@ export default function KYCSubmit() {
         setGovImageUrl(null);
       }
 
-      // Fetch face image
       const faceRes = await fetch(`${API_BASE_URL}/api/kyc/face-image/${submission.userId}`);
       if (faceRes.ok) {
         const faceBlob = await faceRes.blob();
@@ -315,6 +374,128 @@ export default function KYCSubmit() {
           </div>
         </div>
 
+        {/* Filter Bar */}
+        <div
+          className="rounded-xl p-4 mb-6"
+          style={{
+            backgroundColor: COLORS.card,
+            border: `1px solid ${COLORS.border}`,
+          }}
+        >
+          <div className="flex flex-col lg:flex-row gap-4">
+            {/* Search Bar */}
+            <div className="flex-1">
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2" style={{ color: COLORS.text, opacity: 0.5 }} />
+                <input
+                  type="text"
+                  placeholder="Search by name, email or user ID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 rounded-lg text-sm focus:outline-none"
+                  style={{
+                    backgroundColor: "rgba(255,255,255,0.05)",
+                    border: `1px solid ${COLORS.border}`,
+                    color: COLORS.text,
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Status Filter */}
+            <div className="lg:w-48">
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none bg-black"
+                style={{
+                  // backgroundColor: "rgba(255,255,255,0.05)",
+                  border: `1px solid ${COLORS.border}`,
+                  color: COLORS.text,
+                }}
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="approved">Approved</option>
+                <option value="rejected">Rejected</option>
+              </select>
+            </div>
+
+            {/* From Date */}
+            <div className="lg:w-48">
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.05)",
+                  border: `1px solid ${COLORS.border}`,
+                  color: COLORS.text,
+                }}
+              />
+            </div>
+
+            {/* To Date */}
+            <div className="lg:w-48">
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-sm focus:outline-none"
+                style={{
+                  backgroundColor: "rgba(255,255,255,0.05)",
+                  border: `1px solid ${COLORS.border}`,
+                  color: COLORS.text,
+                }}
+              />
+            </div>
+
+            {/* Clear Filters Button */}
+            {(searchTerm || statusFilter !== "all" || fromDate || toDate) && (
+              <button
+                onClick={clearFilters}
+                className="px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                style={{
+                  backgroundColor: "rgba(239,68,68,0.15)",
+                  color: COLORS.negative,
+                  border: `1px solid ${COLORS.negative}30`,
+                }}
+              >
+                Clear Filters
+              </button>
+            )}
+          </div>
+          
+          {/* Active Filters Display */}
+          <div className="flex flex-wrap gap-2 mt-3">
+            {searchTerm && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)", color: COLORS.text }}>
+                Search: {searchTerm}
+                <button onClick={() => setSearchTerm("")} className="ml-1 hover:opacity-70">×</button>
+              </span>
+            )}
+            {statusFilter !== "all" && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)", color: COLORS.text }}>
+                Status: {statusFilter}
+                <button onClick={() => setStatusFilter("all")} className="ml-1 hover:opacity-70">×</button>
+              </span>
+            )}
+            {fromDate && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)", color: COLORS.text }}>
+                From: {new Date(fromDate).toLocaleDateString()}
+                <button onClick={() => setFromDate("")} className="ml-1 hover:opacity-70">×</button>
+              </span>
+            )}
+            {toDate && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs" style={{ backgroundColor: "rgba(255,255,255,0.1)", color: COLORS.text }}>
+                To: {new Date(toDate).toLocaleDateString()}
+                <button onClick={() => setToDate("")} className="ml-1 hover:opacity-70">×</button>
+              </span>
+            )}
+          </div>
+        </div>
+
         {/* Submissions Table */}
         <div
           className="rounded-2xl overflow-hidden"
@@ -324,15 +505,17 @@ export default function KYCSubmit() {
           }}
         >
           <div
-            className="p-4 border-b"
+            className="p-4 border-b flex justify-between items-center"
             style={{ borderColor: COLORS.border }}
           >
-            <h2 className="font-semibold" style={{ color: COLORS.text }}>
-              KYC Submissions
-            </h2>
-            <p className="text-xs mt-1" style={{ color: COLORS.text, opacity: 0.6 }}>
-              View and manage user KYC document submissions
-            </p>
+            <div>
+              <h2 className="font-semibold" style={{ color: COLORS.text }}>
+                KYC Submissions
+              </h2>
+              <p className="text-xs mt-1" style={{ color: COLORS.text, opacity: 0.6 }}>
+                Showing {filteredSubmissions.length} of {userSubmissions.length} submissions
+              </p>
+            </div>
           </div>
 
           <div className="overflow-x-auto">
@@ -362,17 +545,27 @@ export default function KYCSubmit() {
                 </tr>
               </thead>
               <tbody>
-                {userSubmissions.length === 0 ? (
+                {filteredSubmissions.length === 0 ? (
                   <tr>
                     <td colSpan="5" className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center gap-2">
-                        <Shield size={48} style={{ color: COLORS.text, opacity: 0.3 }} />
-                        <p style={{ color: COLORS.text, opacity: 0.5 }}>No KYC submissions found</p>
+                        <Filter size={48} style={{ color: COLORS.text, opacity: 0.3 }} />
+                        <p style={{ color: COLORS.text, opacity: 0.5 }}>No submissions match your filters</p>
+                        <button
+                          onClick={clearFilters}
+                          className="px-3 py-1.5 rounded-lg text-xs font-medium mt-2"
+                          style={{
+                            backgroundColor: COLORS.gold,
+                            color: "#000",
+                          }}
+                        >
+                          Clear All Filters
+                        </button>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  userSubmissions.map((submission) => (
+                  filteredSubmissions.map((submission) => (
                     <tr
                       key={submission.id}
                       style={{ borderBottom: `1px solid ${COLORS.border}` }}
@@ -429,7 +622,7 @@ export default function KYCSubmit() {
                             {submission.rejectionReason}
                           </p>
                         )}
-                       </td>
+                      </td>
 
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -476,7 +669,7 @@ export default function KYCSubmit() {
                             </>
                           )}
                         </div>
-                       </td>
+                      </td>
                     </tr>
                   ))
                 )}
