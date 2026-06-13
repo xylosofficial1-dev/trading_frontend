@@ -201,56 +201,60 @@ const toggleCommissionStatus = async (userId, currentStatus) => {
     }
   };
 
-  const updateUserAmounts = async (userId) => {
-    try {
-      setSavingAmount(userId);
+ const updateUserAmounts = async (userId) => {
+  try {
+    setSavingAmount(userId);
 
-      // get current user
-      const currentUser = users.find((u) => u.id === userId);
+    const currentUser = users.find((u) => u.id === userId);
+    const amounts = editingAmounts[userId] || {
+      wallet_amount: currentUser.wallet_amount,
+      trading_wallet_amount: currentUser.trading_wallet_amount,
+    };
 
-      // edited values OR existing values
-      const amounts = editingAmounts[userId] || {
-        wallet_amount: currentUser.wallet_amount,
-        trading_wallet_amount: currentUser.trading_wallet_amount,
-      };
+    const walletAmount = parseFloat(amounts.wallet_amount);
+    const tradingAmount = parseFloat(amounts.trading_wallet_amount);
 
-      const res = await fetch(`${BASE_URL}/api/users/${userId}/amounts`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          wallet_amount: parseFloat(amounts.wallet_amount || 0),
-          trading_wallet_amount: parseFloat(amounts.trading_wallet_amount || 0),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!data.success) {
-        throw new Error("Failed to update amounts");
-      }
-
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === userId
-            ? {
-                ...u,
-                wallet_amount: amounts.wallet_amount,
-                trading_wallet_amount: amounts.trading_wallet_amount,
-              }
-            : u,
-        ),
-      );
-
-      alert("Amounts updated successfully");
-    } catch (err) {
-      console.error(err);
-      alert("Failed to update amounts");
-    } finally {
-      setSavingAmount(null);
+    if (isNaN(walletAmount) || isNaN(tradingAmount)) {
+      throw new Error("Invalid amount values");
     }
-  };
+
+    const res = await fetch(`${BASE_URL}/api/users/${userId}/amounts`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        wallet_amount: walletAmount,
+        trading_wallet_amount: tradingAmount,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!data.success) {
+      throw new Error(data.message || "Failed to update amounts");
+    }
+
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId
+          ? {
+              ...u,
+              wallet_amount: walletAmount,
+              trading_wallet_amount: tradingAmount,
+            }
+          : u
+      )
+    );
+
+    alert("Amounts updated successfully");
+  } catch (err) {
+    console.error(err);
+    alert(err.message || "Failed to update amounts");
+  } finally {
+    setSavingAmount(null);
+  }
+};
 
   const filteredUsers = users.filter((user) => {
     const search = searchTerm.toLowerCase();
@@ -1028,169 +1032,169 @@ const TreeNode = ({ node, level = 0 }) => {
                       </p>
                     </div>
                   </div>  */}
-                  <div className="col-span-2 space-y-2 pl-2">
-                    {editingUserId === user.id ? (
-                      <>
-                        {/* Wallet Amount */}
-                        <div className="flex items-center gap-2">
-                          <Wallet
-                            size={12}
-                            style={{
-                              color: COLORS.gold,
-                              opacity: 0.8,
-                              flexShrink: 0,
-                            }}
-                          />
+                  {/* Replace the Amounts column section (around line 665-750) with this updated version */}
+<div className="col-span-2 space-y-2 pl-2">
+  {editingUserId === user.id ? (
+    <>
+      {/* Wallet Amount */}
+      <div className="flex items-center gap-2">
+        <Wallet
+          size={12}
+          style={{
+            color: COLORS.gold,
+            opacity: 0.8,
+            flexShrink: 0,
+          }}
+        />
+        <input
+          type="number"
+          step="0.01"
+          value={
+            editingAmounts[user.id]?.wallet_amount ?? 
+            (user.wallet_amount !== undefined && user.wallet_amount !== null ? user.wallet_amount : 0)
+          }
+          onChange={(e) =>
+            setEditingAmounts((prev) => ({
+              ...prev,
+              [user.id]: {
+                wallet_amount: e.target.value,
+                trading_wallet_amount:
+                  prev[user.id]?.trading_wallet_amount ??
+                  (user.trading_wallet_amount !== undefined && user.trading_wallet_amount !== null ? user.trading_wallet_amount : 0),
+              },
+            }))
+          }
+          className="w-24 px-2 py-1 rounded text-sm"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.05)",
+            border: `1px solid ${COLORS.border}`,
+            color: COLORS.text,
+          }}
+          placeholder="0.00"
+        />
+      </div>
 
-                          <input
-                            type="number"
-                            value={
-                              editingAmounts[user.id]?.wallet_amount ??
-                              user.wallet_amount
-                            }
-                            onChange={(e) =>
-                              setEditingAmounts((prev) => ({
-                                ...prev,
-                                [user.id]: {
-                                  wallet_amount: e.target.value,
-                                  trading_wallet_amount:
-                                    prev[user.id]?.trading_wallet_amount ??
-                                    user.trading_wallet_amount,
-                                },
-                              }))
-                            }
-                            className="w-24 px-2 py-1 rounded text-sm"
-                            style={{
-                              backgroundColor: "rgba(255,255,255,0.05)",
-                              border: `1px solid ${COLORS.border}`,
-                              color: COLORS.text,
-                            }}
-                          />
-                        </div>
+      {/* Trading Amount */}
+      <div className="flex items-center gap-2">
+        <TrendingUp
+          size={12}
+          style={{
+            color: COLORS.purple,
+            opacity: 0.8,
+            flexShrink: 0,
+          }}
+        />
+        <input
+          type="number"
+          step="0.01"
+          value={
+            editingAmounts[user.id]?.trading_wallet_amount ?? 
+            (user.trading_wallet_amount !== undefined && user.trading_wallet_amount !== null ? user.trading_wallet_amount : 0)
+          }
+          onChange={(e) =>
+            setEditingAmounts((prev) => ({
+              ...prev,
+              [user.id]: {
+                wallet_amount:
+                  prev[user.id]?.wallet_amount ??
+                  (user.wallet_amount !== undefined && user.wallet_amount !== null ? user.wallet_amount : 0),
+                trading_wallet_amount: e.target.value,
+              },
+            }))
+          }
+          className="w-24 px-2 py-1 rounded text-sm"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.05)",
+            border: `1px solid ${COLORS.border}`,
+            color: COLORS.text,
+          }}
+          placeholder="0.00"
+        />
+      </div>
 
-                        {/* Trading Amount */}
-                        <div className="flex items-center gap-2">
-                          <TrendingUp
-                            size={12}
-                            style={{
-                              color: COLORS.purple,
-                              opacity: 0.8,
-                              flexShrink: 0,
-                            }}
-                          />
+      <div className="flex gap-2">
+        <button
+          onClick={async () => {
+            await updateUserAmounts(user.id);
+            setEditingUserId(null);
+          }}
+          disabled={savingAmount === user.id}
+          className="px-3 py-1 rounded-lg text-xs font-medium"
+          style={{
+            backgroundColor: COLORS.gold,
+            color: "#000",
+          }}
+        >
+          {savingAmount === user.id ? "Saving..." : "Save"}
+        </button>
+        <button
+          onClick={() => setEditingUserId(null)}
+          className="px-3 py-1 rounded-lg text-xs"
+          style={{
+            backgroundColor: "rgba(255,255,255,0.08)",
+            color: COLORS.text,
+          }}
+        >
+          Cancel
+        </button>
+      </div>
+    </>
+  ) : (
+    <>
+      {/* Display Wallet Amount */}
+      <div className="flex items-center gap-2">
+        <Wallet
+          size={12}
+          style={{
+            color: COLORS.gold,
+            opacity: 0.8,
+            flexShrink: 0,
+          }}
+        />
+        <p className="text-sm font-medium" style={{ color: COLORS.text }}>
+          ${(parseFloat(user.wallet_amount) || 0).toFixed(2)}
+        </p>
+      </div>
 
-                          <input
-                            type="number"
-                            value={
-                              editingAmounts[user.id]?.trading_wallet_amount ??
-                              user.trading_wallet_amount
-                            }
-                            onChange={(e) =>
-                              setEditingAmounts((prev) => ({
-                                ...prev,
-                                [user.id]: {
-                                  wallet_amount:
-                                    prev[user.id]?.wallet_amount ??
-                                    user.wallet_amount,
-                                  trading_wallet_amount: e.target.value,
-                                },
-                              }))
-                            }
-                            className="w-24 px-2 py-1 rounded text-sm"
-                            style={{
-                              backgroundColor: "rgba(255,255,255,0.05)",
-                              border: `1px solid ${COLORS.border}`,
-                              color: COLORS.text,
-                            }}
-                          />
-                        </div>
+      {/* Display Trading Amount */}
+      <div className="flex items-center gap-2">
+        <TrendingUp
+          size={12}
+          style={{
+            color: COLORS.purple,
+            opacity: 0.8,
+            flexShrink: 0,
+          }}
+        />
+        <p className="text-sm" style={{ color: COLORS.text }}>
+          ${(parseFloat(user.trading_wallet_amount) || 0).toFixed(2)}
+        </p>
+      </div>
 
-                        <div className="flex gap-2">
-                          <button
-                            onClick={async () => {
-                              await updateUserAmounts(user.id);
-                              setEditingUserId(null);
-                            }}
-                            disabled={savingAmount === user.id}
-                            className="px-3 py-1 rounded-lg text-xs font-medium"
-                            style={{
-                              backgroundColor: COLORS.gold,
-                              color: "#000",
-                            }}
-                          >
-                            {savingAmount === user.id ? "Saving..." : "Save"}
-                          </button>
-
-                          <button
-                            onClick={() => setEditingUserId(null)}
-                            className="px-3 py-1 rounded-lg text-xs"
-                            style={{
-                              backgroundColor: "rgba(255,255,255,0.08)",
-                              color: COLORS.text,
-                            }}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <Wallet
-                            size={12}
-                            style={{
-                              color: COLORS.gold,
-                              opacity: 0.8,
-                            }}
-                          />
-
-                          <p
-                            className="text-sm font-medium"
-                            style={{ color: COLORS.text }}
-                          >
-                            ${parseFloat(user.wallet_amount).toFixed(2)}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <TrendingUp
-                            size={12}
-                            style={{
-                              color: COLORS.purple,
-                              opacity: 0.8,
-                            }}
-                          />
-
-                          <p className="text-sm" style={{ color: COLORS.text }}>
-                            ${parseFloat(user.trading_wallet_amount).toFixed(2)}
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={() => {
-                            setEditingUserId(user.id);
-
-                            setEditingAmounts((prev) => ({
-                              ...prev,
-                              [user.id]: {
-                                wallet_amount: user.wallet_amount,
-                                trading_wallet_amount:
-                                  user.trading_wallet_amount,
-                              },
-                            }));
-                          }}
-                          className="px-3 py-1 rounded-lg text-xs font-medium"
-                          style={{
-                            backgroundColor: "rgba(255,215,0,0.15)",
-                            color: COLORS.gold,
-                            border: `1px solid ${COLORS.gold}30`,
-                          }}
-                        >
-                          Edit
-                        </button>
-                      </>
-                    )}
-                  </div>
+      {/* Edit Button */}
+      <button
+        onClick={() => {
+          setEditingUserId(user.id);
+          setEditingAmounts((prev) => ({
+            ...prev,
+            [user.id]: {
+              wallet_amount: user.wallet_amount || 0,
+              trading_wallet_amount: user.trading_wallet_amount || 0,
+            },
+          }));
+        }}
+        className="px-3 py-1 rounded-lg text-xs font-medium"
+        style={{
+          backgroundColor: "rgba(255,215,0,0.15)",
+          color: COLORS.gold,
+          border: `1px solid ${COLORS.gold}30`,
+        }}
+      >
+        Edit
+      </button>
+    </>
+  )}
+</div>
 
                <div className="col-span-2 flex items-center gap-2">
   <button
@@ -1250,7 +1254,7 @@ const TreeNode = ({ node, level = 0 }) => {
                 </div>
               ))
             )}
-          </div>
+          </div> 
         </div>
 
         {/* Mobile/Tablet Card View */}
@@ -1769,312 +1773,6 @@ const TreeNode = ({ node, level = 0 }) => {
           </div>
         </div>
       )}
-
-      {/* User Details Modal - Mobile Responsive */}
-      {/* {showModal && selectedUser && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div
-            className="w-full max-w-2xl rounded-2xl my-4"
-            style={{
-              backgroundColor: COLORS.card,
-              border: `1px solid ${COLORS.border}`,
-            }}
-          >
-            <div
-              className="p-5 sm:p-6 border-b flex items-center justify-between"
-              style={{ borderColor: COLORS.border }}
-            >
-              <h2
-                className="text-lg sm:text-xl font-bold"
-                style={{ color: COLORS.gold }}
-              >
-                User Details
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-2 rounded-lg hover:bg-white/10 transition-colors"
-                style={{ color: COLORS.text }}
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            <div className="p-5 sm:p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 sm:gap-6">
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Full Name
-                    </label>
-                    <p
-                      className="text-base sm:text-lg font-medium mt-1 break-words"
-                      style={{ color: COLORS.text }}
-                    >
-                      {selectedUser.name} {getGenderSymbol(selectedUser.gender)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      User ID
-                    </label>
-                    <p
-                      className="text-base sm:text-lg font-medium mt-1 font-mono"
-                      style={{ color: COLORS.gold }}
-                    >
-                      #{selectedUser.id}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Email Address
-                    </label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p
-                        className="text-sm sm:text-base font-medium break-all flex-1"
-                        style={{ color: COLORS.text }}
-                      >
-                        {selectedUser.email}
-                      </p>
-                      <button
-                        onClick={() =>
-                          copyToClipboard(selectedUser.email, "modal-email")
-                        }
-                        className="p-1 rounded hover:bg-white/10 flex-shrink-0"
-                        style={{ color: COLORS.text }}
-                      >
-                        {copiedField === "modal-email" ? (
-                          <Check size={14} />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Phone Number
-                    </label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p
-                        className="text-sm sm:text-base font-medium break-all"
-                        style={{ color: COLORS.text }}
-                      >
-                        {selectedUser.country_code} {selectedUser.phone}
-                      </p>
-                      <button
-                        onClick={() =>
-                          copyToClipboard(
-                            `${selectedUser.country_code}${selectedUser.phone}`,
-                            "modal-phone",
-                          )
-                        }
-                        className="p-1 rounded hover:bg-white/10 flex-shrink-0"
-                        style={{ color: COLORS.text }}
-                      >
-                        {copiedField === "modal-phone" ? (
-                          <Check size={14} />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Date of Birth
-                    </label>
-                    <p
-                      className="text-base sm:text-lg font-medium mt-1"
-                      style={{ color: COLORS.text }}
-                    >
-                      {formatDate(selectedUser.dob)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Gender
-                    </label>
-                    <p
-                      className="text-base sm:text-lg font-medium mt-1"
-                      style={{ color: COLORS.text }}
-                    >
-                      {selectedUser.gender}{" "}
-                      {getGenderSymbol(selectedUser.gender)}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Wallet Address
-                    </label>
-                    <div className="flex items-center gap-2 mt-1">
-                      <p
-                        className="text-xs sm:text-sm font-mono break-all flex-1"
-                        style={{ color: COLORS.gold }}
-                      >
-                        {selectedUser.wallet_address}
-                      </p>
-                      <button
-                        onClick={() =>
-                          copyToClipboard(
-                            selectedUser.wallet_address,
-                            "modal-wallet",
-                          )
-                        }
-                        className="p-1 rounded hover:bg-white/10 flex-shrink-0"
-                        style={{ color: COLORS.text }}
-                      >
-                        {copiedField === "modal-wallet" ? (
-                          <Check size={14} />
-                        ) : (
-                          <Copy size={14} />
-                        )}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label
-                        className="text-xs sm:text-sm"
-                        style={{ color: COLORS.text, opacity: 0.7 }}
-                      >
-                        Wallet Amount
-                      </label>
-                      <p
-                        className="text-base sm:text-xl font-bold mt-1"
-                        style={{ color: COLORS.gold }}
-                      >
-                        ${selectedUser.wallet_amount}
-                      </p>
-                    </div>
-                    <div>
-                      <label
-                        className="text-xs sm:text-sm"
-                        style={{ color: COLORS.text, opacity: 0.7 }}
-                      >
-                        Strategy Balance
-                      </label>
-                      <p
-                        className="text-base sm:text-xl font-bold mt-1"
-                        style={{ color: COLORS.purple }}
-                      >
-                        ${selectedUser.trading_wallet_amount}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div
-                className="mt-6 pt-6 border-t"
-                style={{ borderColor: COLORS.border }}
-              >
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                  <div>
-                    <label
-                      className="text-xs sm:text-sm"
-                      style={{ color: COLORS.text, opacity: 0.7 }}
-                    >
-                      Member Since
-                    </label>
-                    <p
-                      className="text-base sm:text-lg font-medium mt-1"
-                      style={{ color: COLORS.text }}
-                    >
-                      {formatDate(selectedUser.created_at)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center gap-4">
-                    <div>
-                      <label
-                        className="text-xs sm:text-sm"
-                        style={{ color: COLORS.text, opacity: 0.7 }}
-                      >
-                        Account Status
-                      </label>
-                      <div className="flex items-center gap-2 mt-1">
-                        <button
-                          onClick={() =>
-                            toggleUserStatus(
-                              selectedUser.id,
-                              selectedUser.status,
-                            )
-                          }
-                          className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium transition-all ${
-                            selectedUser.status === "ok"
-                              ? "bg-green-500/20 text-green-400 hover:bg-green-500/30"
-                              : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                          }`}
-                        >
-                          {selectedUser.status === "ok"
-                            ? "Active Account"
-                            : "Blocked Account"}
-                        </button>
-
-                        <div
-                          className={`px-2 py-1 rounded-full text-xs sm:text-sm font-medium ${
-                            selectedUser.is_verified
-                              ? "bg-green-500/20 text-green-400"
-                              : "bg-red-500/20 text-red-400"
-                          }`}
-                        >
-                          {selectedUser.is_verified ? "Verified" : "Unverified"}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className="p-5 sm:p-6 border-t flex justify-end"
-              style={{ borderColor: COLORS.border }}
-            >
-              <button
-                onClick={() => setShowModal(false)}
-                className="px-4 py-2 rounded-xl transition-colors text-sm sm:text-base"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.05)",
-                  color: COLORS.text,
-                }}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )} */}
 
       {/* Referral Tree Modal */}
 {treeModalOpen && treeData && (
