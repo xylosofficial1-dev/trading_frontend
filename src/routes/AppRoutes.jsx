@@ -18,37 +18,42 @@ import KYCSubmit from "../pages/KYCSubmit";
 import DailyCommission from "../pages/DailyCommission";
 import AdminPremium from "../pages/AdminPremium";
 
-export default function AppRoutes() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
+// export default function AppRoutes() {
+//   return (
+//     <BrowserRouter>
+//       <Routes>
+//         <Route path="/login" element={<Login />} />
 
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <AdminLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Dashboard />} />
-          <Route path="users" element={<Users />} />
-          <Route path="notifications" element={<Notifications />} />
-          <Route path="payoptions" element={<PayOptions />} />
-          <Route path="wallet-request" element={<WalletSettings />} />
-          <Route path="/trade-wallet-request" element={<TradeWalletRequest />} />
-<Route path="/videos" element={<Videos />} />
-<Route path="/markets" element={<Markets />} />
-<Route path="p2p" element={<P2PAdmin />} />
-<Route path="/swap-history" element={<SwapHistory />} />
-<Route path="/task-salary-history" element={<TaskSalaryHistory />} />
-<Route path="/withdrawal-request" element={<WithdrawalRequest />} />
-<Route path="/kyc-submit" element={<KYCSubmit />} />
-<Route path="/daily-commission" element={<DailyCommission />} />
-<Route path="/premium" element={<AdminPremium />} />
-        </Route>
-      </Routes>
-    </BrowserRouter>
-  );
+//         <Route
+//           path="/"
+//           element={
+//             <ProtectedRoute>
+//               <AdminLayout />
+//             </ProtectedRoute>
+//           }
+//         >
+//           <Route index element={<Dashboard />} />
+//           <Route path="users" element={<Users />} />
+//           <Route path="notifications" element={<Notifications />} />
+//           <Route path="payoptions" element={<PayOptions />} />
+//           <Route path="wallet-request" element={<WalletSettings />} />
+//           <Route path="/trade-wallet-request" element={<TradeWalletRequest />} />
+// <Route path="/videos" element={<Videos />} />
+// <Route path="/markets" element={<Markets />} />
+// <Route path="p2p" element={<P2PAdmin />} />
+// <Route path="/swap-history" element={<SwapHistory />} />
+// <Route path="/task-salary-history" element={<TaskSalaryHistory />} />
+// <Route path="/withdrawal-request" element={<WithdrawalRequest />} />
+// <Route path="/kyc-submit" element={<KYCSubmit />} />
+// <Route path="/daily-commission" element={<DailyCommission />} />
+// <Route path="/premium" element={<AdminPremium />} />
+//         </Route>
+//       </Routes>
+//     </BrowserRouter>
+//   );
+// }
+
+
+export default function AppRoutes() {
+  return null;
 }
