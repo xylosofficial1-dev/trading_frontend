@@ -26,7 +26,7 @@ const COLORS = {
   purple: "#8B5CF6",
 };
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 export default function DailyCommission() {
   const [commissions, setCommissions] = useState([]);
@@ -304,7 +304,7 @@ export default function DailyCommission() {
           </div>
 
           <div
-            className="rounded-xl p-4"
+            className="rounded-xl p-4" 
             style={{
               backgroundColor: COLORS.card,
               border: `1px solid ${COLORS.border}`,
